@@ -3,6 +3,7 @@
 | File | Source | Licence |
 |---|---|---|
 | hero-carekar.webp | Supplied by Carekar | Owned by client |
+| one-time-clean.webp | Supplied by Carekar | Owned by client |
 | exterior-wash.webp | Pexels #6872580 (Tima Miroshnichenko) | Pexels Licence |
 | interior-wipe.webp | Pexels #4218861 | Pexels Licence |
 | interior-seat.webp | Pexels #5233285 (Khunkorn Laowisit) | Pexels Licence |

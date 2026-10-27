@@ -58,7 +58,7 @@ export const services = ["subscription", "one_time"] as const;
 export const oneTime = {
   label: "One-time car cleaning",
   price: 249,
-  image: "/images/interior-wipe.webp",
+  image: "/images/one-time-clean.webp",
   inclusions: ["Full exterior cleaning", "Interior cleaning: dashboard, seats & mats", "Done in your society parking", "Trained & verified staff"],
 };
 

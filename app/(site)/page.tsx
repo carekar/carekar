@@ -159,7 +159,7 @@ export default async function Home() {
           {!oneTime.hidden && (
             <article id="one-time" data-section="one_time" className="card mt-6 grid scroll-mt-20 overflow-hidden md:mt-10 md:grid-cols-[2fr_3fr]">
               <div className="relative aspect-[16/9] bg-cream-100 md:aspect-auto">
-                <Image src={oneTime.image} alt="Car interior being cleaned" fill sizes="(min-width:768px) 40vw, 100vw" className="object-cover" />
+                <Image src={oneTime.image} alt="Carekar team member cleaning a car in a society's basement parking" fill sizes="(min-width:768px) 40vw, 100vw" className="object-cover object-[62%_center]" />
                 <span className="absolute left-3 top-3 rounded-full bg-sun-400 px-3 py-1 text-xs font-bold text-forest-900">No subscription</span>
               </div>
               <div className="flex flex-col p-5 md:p-7">
