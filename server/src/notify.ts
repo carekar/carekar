@@ -12,6 +12,7 @@ type NewLead = {
   towerFlat?: string;
   planLabel: string;
   price: number;
+  oneTime?: boolean;
   startDate: string;
   callbackRequested?: boolean;
   channel?: string;
@@ -26,9 +27,9 @@ export async function notifyNewLead(l: NewLead) {
   const text = [
     `${l.callbackRequested ? "📞 Callback request" : "🚗 New booking"} · ${l.ref}`,
     `${l.name} · +91 ${l.mobile}`,
-    `${l.planLabel} · ${formatINR(l.price)}/month`,
+    `${l.planLabel} · ${formatINR(l.price)}${l.oneTime ? " one-time" : "/month"}`,
     `${l.society}${l.towerFlat ? ", " + l.towerFlat : ""}`,
-    `Start: ${l.startDate}${l.channel ? ` · Source: ${l.channel}` : ""}`,
+    `${l.oneTime ? "Date" : "Start"}: ${l.startDate}${l.channel ? ` · Source: ${l.channel}` : ""}`,
     adminUrl,
   ].join("\n");
 

@@ -49,7 +49,7 @@ export const postgresRepo: Repo = {
     const db = prisma();
     const now = new Date().toISOString();
     const existing = await db.lead.findFirst({
-      where: { mobile: fields.mobile, vehicle: fields.vehicle, demo: false, createdAt: { gt: new Date(Date.now() - 86400000) } },
+      where: { mobile: fields.mobile, vehicle: fields.vehicle, service: fields.service, demo: false, createdAt: { gt: new Date(Date.now() - 86400000) } },
       orderBy: { createdAt: "desc" },
       select: { id: true, ref: true, teamNotes: true },
     });
@@ -128,6 +128,16 @@ export const postgresRepo: Repo = {
     await inChunks(demo.payments, (c) => db.payment.createMany({ data: c.map(paymentData) }));
     await inChunks(demo.sessions, (c) => db.session.createMany({ data: c.map(sessionData) }));
     await inChunks(demo.events, (c) => db.event.createMany({ data: c.map(eventData) }));
+  },
+
+  async customerBookings(uid) {
+    const rows = await prisma().lead.findMany({
+      where: { customerUid: uid, demo: false },
+      orderBy: { createdAt: "desc" },
+      include: { payments: { orderBy: { at: "asc" } } },
+      take: 50,
+    });
+    return rows.map(({ payments, ...lead }) => ({ lead: leadFromRow(lead), payments: payments.map(paymentFromRow) }));
   },
 
   async getSettings() {

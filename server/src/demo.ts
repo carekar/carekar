@@ -1,5 +1,5 @@
 import type { DB, Lead, LeadStatus, Payment, Session, TrackEvent } from "../../lib/types";
-import { plans, type VehicleType } from "../../lib/site";
+import { oneTime, plans, type VehicleType } from "../../lib/site";
 
 // Generates ~45 days of realistic demo traffic so the admin dashboard can be
 // previewed. Every record is flagged `demo: true` and can be cleared in Settings.
@@ -119,10 +119,12 @@ export function buildDemoData(): DB {
       ev("form_step_completed", { step: 4, duration_ms: 15000 + Math.floor(r() * 25000) }, "/book");
       if (!pass(0.95)) { ev("form_abandoned", { last_step: 5, last_field: "review" }, "/book"); continue; }
 
-      // Lead submitted
+      // Lead submitted (about 1 in 7 car bookings is a one-time clean)
+      const single = plan.vehicle !== "bike" && r() < 0.15;
+      const price = single ? oneTime.price : plan.price;
       const id = "lead_demo_" + db.seq;
       const ref = "DEMO-" + db.seq++;
-      ev("lead_submitted", { vehicle: plan.vehicle, price: plan.price }, "/book");
+      ev("lead_submitted", { vehicle: plan.vehicle, price, service: single ? "one_time" : "subscription" }, "/book");
       db.events[db.events.length - 1].leadId = id;
       const createdAt = new Date(Math.min(t, now));
       const ageDays = (now - createdAt.getTime()) / DAY;
@@ -149,12 +151,12 @@ export function buildDemoData(): DB {
             if (r() < 0.72) {
               if (move("active", 1, 48)) {
                 const payAt = at;
-                db.payments.push({ id: "pay_demo_" + db.seq, leadId: id, amount: plan.price, method: pick(["upi", "upi", "upi_autopay", "card", "netbanking"]), status: "captured", at: new Date(payAt).toISOString(), demo: true });
-                if (now - payAt > 30 * DAY) {
-                  if (r() < 0.85) db.payments.push({ id: "pay_demo_r" + db.seq, leadId: id, amount: plan.price, method: "upi_autopay", status: "captured", at: new Date(payAt + 30 * DAY).toISOString(), demo: true });
+                db.payments.push({ id: "pay_demo_" + db.seq, leadId: id, amount: price, method: pick(["upi", "upi", "upi_autopay", "card", "netbanking"]), status: "captured", at: new Date(payAt).toISOString(), demo: true });
+                if (!single && now - payAt > 30 * DAY) {
+                  if (r() < 0.85) db.payments.push({ id: "pay_demo_r" + db.seq, leadId: id, amount: price, method: "upi_autopay", status: "captured", at: new Date(payAt + 30 * DAY).toISOString(), demo: true });
                   else move("cancelled", 30 * 24, 31 * 24);
                 }
-                if (r() < 0.06) db.payments.push({ id: "pay_demo_f" + db.seq, leadId: id, amount: plan.price, method: "card", status: "failed", at: new Date(payAt - 600000).toISOString(), demo: true });
+                if (r() < 0.06) db.payments.push({ id: "pay_demo_f" + db.seq, leadId: id, amount: price, method: "card", status: "failed", at: new Date(payAt - 600000).toISOString(), demo: true });
               }
             } else if (ageDays > 3) {
               lostReason = pick(lostReasons);
@@ -169,6 +171,7 @@ export function buildDemoData(): DB {
 
       db.leads.push({
         id, ref, createdAt: createdAt.toISOString(),
+        service: single ? "one_time" : "subscription",
         vehicle: plan.vehicle, vehicleModel: r() < 0.7 ? pick(models[plan.vehicle]) : "", vehicleCount: r() < 0.1 ? 2 : 1,
         name, mobile: String(9 - Math.floor(r() * 3)) + String(Math.floor(r() * 1e9)).padStart(9, "0"),
         sameWhatsapp: true, whatsapp: "",
@@ -178,7 +181,7 @@ export function buildDemoData(): DB {
         preferredTime: pick(["Early morning (5–7 AM)", "Morning (7–9 AM)", "No preference"]),
         vehicleColour: "", registrationNo: "", heardFrom: "", notes: "",
         callbackRequested: r() < 0.25,
-        planPrice: plan.price, status, lostReason, history, teamNotes: [],
+        planPrice: price, status, lostReason, history, teamNotes: [],
         visitorId,
         firstTouch: { channel: ch.key, source: ch.source, medium: ch.medium, campaign: session.campaign, landing: "/", at: session.startedAt },
         lastTouch: { channel: ch.key, source: ch.source, medium: ch.medium, campaign: session.campaign, landing: "/", at: session.startedAt },

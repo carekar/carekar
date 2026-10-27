@@ -49,12 +49,19 @@ adminRoutes.put("/settings", ownerOnly, async (req, res) => {
     email?: string;
     prices?: Record<string, unknown>;
     hiddenPlans?: unknown[];
+    oneTimePrice?: unknown;
+    oneTimeHidden?: unknown;
     societies?: unknown[];
   };
+  const oneTimePrice = Number(b.oneTimePrice);
   const settings: Settings = {
     contact: { phone: digits10(b.phone), whatsapp: digits10(b.whatsapp), email: String(b.email || "").trim().slice(0, 80) },
     prices: {},
     hiddenPlans: [],
+    oneTime: {
+      price: Number.isInteger(oneTimePrice) && oneTimePrice >= 1 && oneTimePrice <= 100000 ? oneTimePrice : undefined,
+      hidden: !!b.oneTimeHidden,
+    },
     societies: (Array.isArray(b.societies) ? b.societies : [])
       .map((s) => String(s).trim().slice(0, 80))
       .filter((s, i, a) => s && a.indexOf(s) === i)

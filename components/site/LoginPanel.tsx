@@ -40,8 +40,13 @@ export function LoginPanel({ next }: { next: string }) {
             {customer.email}
           </p>
           <Link href={next} className="btn-primary mt-6 w-full">
-            {next === "/book" ? "Continue to booking" : "Continue"} <Icon name="arrowRight" className="size-[18px]" />
+            {next === "/book" ? "Continue to booking" : next === "/account" ? "View my bookings" : "Continue"} <Icon name="arrowRight" className="size-[18px]" />
           </Link>
+          {next !== "/account" && (
+            <Link href="/account" className="btn-outline mt-2 w-full">
+              <Icon name="list" className="size-[18px]" /> My bookings
+            </Link>
+          )}
           <button type="button" onClick={signOut} className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 text-sm font-semibold text-forest-700">
             <Icon name="logout" className="size-4" /> Log out
           </button>
@@ -49,7 +54,9 @@ export function LoginPanel({ next }: { next: string }) {
       ) : (
         <>
           <h1 className="mt-5 text-2xl font-extrabold text-forest-900">Log in to Carekar</h1>
-          <p className="mt-1 text-ink-600">Use your Google account to confirm your booking and keep track of it. No password needed.</p>
+          <p className="mt-1 text-ink-600">
+            Use your Google account to confirm bookings and see your bookings and running subscriptions. No password needed.
+          </p>
           <div className="mt-6 space-y-3">
             <InAppBrowserNote location="login_page" />
             <GoogleButton onClick={onSignIn} busy={busy} />

@@ -1,10 +1,13 @@
 import { z } from "zod";
+import { services } from "./site";
 
 export const vehicleTypes = ["hatchback", "sedan", "suv", "luxury", "bike"] as const;
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(""));
 
 export const leadSchema = z.object({
+  /** Monthly subscription or one-time car cleaning (cars only, checked separately: see oneTimeVehicleError). */
+  service: z.enum(services).default("subscription"),
   vehicle: z.enum(vehicleTypes, { message: "Please choose your vehicle type" }),
   vehicleModel: optionalText(60),
   vehicleCount: z.coerce.number().int().min(1).max(5).default(1),
@@ -33,8 +36,12 @@ export const leadSchema = z.object({
 
 export type LeadInput = z.infer<typeof leadSchema>;
 
+/** One-time cleaning is for cars only. Kept outside the schema so `leadSchema.pick` still works per step. */
+export const oneTimeVehicleError = (d: { service?: string; vehicle?: string }) =>
+  d.service === "one_time" && d.vehicle === "bike" ? "One-time cleaning is available for cars only" : undefined;
+
 export const stepFields: Record<number, (keyof LeadInput)[]> = {
-  1: ["vehicle", "vehicleModel", "vehicleCount"],
+  1: ["service", "vehicle", "vehicleModel", "vehicleCount"],
   2: ["name", "mobile", "whatsapp"],
   3: ["society", "towerFlat", "locality", "parkingType", "parkingSlot"],
   4: ["startDate", "preferredTime", "vehicleColour", "registrationNo", "heardFrom", "notes", "consent"],

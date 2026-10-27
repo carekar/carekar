@@ -1,6 +1,6 @@
 import { fileRepo } from "./db/file";
 import { postgresRepo } from "./db/postgres";
-import type { DB, LeadFields, LeadMeta, LeadStatus, Session, Settings, TrackEvent } from "../../lib/types";
+import type { DB, Lead, LeadFields, LeadMeta, LeadStatus, Payment, Session, Settings, TrackEvent } from "../../lib/types";
 
 /** Storage backend. db/postgres.ts (Prisma) and db/file.ts (local preview) implement it. */
 export interface Repo {
@@ -14,6 +14,8 @@ export interface Repo {
   loadDemo(demo: DB): Promise<void>;
   getSettings(): Promise<Settings>;
   saveSettings(settings: Settings): Promise<void>;
+  /** A logged-in customer's own bookings (matched by Google account), newest first, with their payments. */
+  customerBookings(uid: string): Promise<{ lead: Lead; payments: Payment[] }[]>;
 }
 
 export const hasDatabase = () => !!process.env.DATABASE_URL;

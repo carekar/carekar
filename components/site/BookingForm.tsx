@@ -4,15 +4,16 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/Icon";
-import { formatINR, type VehicleType } from "@/lib/site";
+import { formatINR, isCar, type Service, type VehicleType } from "@/lib/site";
 import { findPlan } from "@/lib/config";
 import { useConfig } from "./ConfigProvider";
-import { leadSchema, stepFields, type LeadInput } from "@/lib/validation";
+import { leadSchema, oneTimeVehicleError, stepFields, type LeadInput } from "@/lib/validation";
 import { flushTracking, getSessionId, getTouches, getVisitorId, track } from "@/lib/track";
 import { useCustomer } from "./useCustomer";
 import { GoogleButton, InAppBrowserNote } from "./GoogleLogin";
 
 type Data = {
+  service: Service;
   vehicle: VehicleType | "";
   vehicleModel: string;
   vehicleCount: number;
@@ -35,6 +36,7 @@ type Data = {
 };
 
 const empty: Data = {
+  service: "subscription",
   vehicle: "", vehicleModel: "", vehicleCount: 1,
   name: "", mobile: "", sameWhatsapp: true, whatsapp: "",
   society: "", towerFlat: "", locality: "Greater Noida West", parkingType: "", parkingSlot: "",
@@ -55,12 +57,12 @@ const tomorrow = () => {
 
 type Errors = Partial<Record<keyof Data, string>>;
 
-export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }) {
+export function BookingForm({ initialVehicle, initialService }: { initialVehicle?: VehicleType; initialService?: Service }) {
   const router = useRouter();
   const config = useConfig();
-  const { plans, societies: knownSocieties } = config;
+  const { plans, oneTime, societies: knownSocieties } = config;
   const planByVehicle = (v: string | null | undefined) => findPlan(config, v);
-  const [data, setData] = useState<Data>({ ...empty, vehicle: initialVehicle ?? "" });
+  const [data, setData] = useState<Data>({ ...empty, service: initialService ?? "subscription", vehicle: initialVehicle ?? "" });
   const [step, setStep] = useState(1); // 1–4, 5 = review
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState<false | "book" | "callback">(false);
@@ -84,7 +86,7 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
       if (raw) {
         const draft = JSON.parse(raw) as { data: Data; step: number };
         started.current = true;
-        setData({ ...draft.data, vehicle: initialVehicle ?? draft.data.vehicle });
+        setData({ ...empty, ...draft.data, service: initialService ?? draft.data.service ?? "subscription", vehicle: initialVehicle ?? draft.data.vehicle });
         setStep(Math.min(draft.step, 5));
         track("form_resumed", { step: draft.step });
       }
@@ -149,6 +151,10 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
         if (!errs[k]) errs[k] = issue.message;
       }
     }
+    if (fields.includes("vehicle") && !errs.vehicle) {
+      const e = oneTimeVehicleError(data);
+      if (e) errs.vehicle = e;
+    }
     if (fields.includes("startDate") && data.startDate && data.startDate < tomorrow()) errs.startDate = "Start date must be from tomorrow";
     for (const k of Object.keys(errs)) track("form_field_error", { field: k, step });
     setErrors(errs);
@@ -205,7 +211,7 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
       try {
         localStorage.removeItem(DRAFT_KEY);
       } catch {}
-      const q = new URLSearchParams({ ref: json.ref, n: data.name.split(" ")[0], v: data.vehicle, s: data.society, c: mode === "callback" ? "1" : "0" });
+      const q = new URLSearchParams({ ref: json.ref, n: data.name.split(" ")[0], v: data.vehicle, s: data.society, c: mode === "callback" ? "1" : "0", t: data.service });
       router.push("/book/thank-you?" + q.toString());
     } catch (e) {
       setServerError(e instanceof Error ? e.message : "Something went wrong");
@@ -214,6 +220,17 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
   };
 
   const plan = planByVehicle(data.vehicle);
+  const single = data.service === "one_time";
+  const price = single ? oneTime.price : plan?.price ?? 0;
+  const priceUnit = single ? " one-time" : "/month";
+  const planName = single ? oneTime.label : plan ? plan.label + " plan" : "";
+  const vehicles = single ? plans.filter((p) => isCar(p.vehicle)) : plans;
+  const chooseService = (svc: Service) => {
+    if (svc === data.service) return;
+    set("service", svc);
+    if (svc === "one_time" && data.vehicle === "bike") set("vehicle", "");
+    track("service_selected", { service: svc, location: "form" });
+  };
   const progress = step === 5 ? 100 : ((step - 1) / 4) * 100 + 8;
 
   return (
@@ -226,7 +243,7 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
               <Icon name="arrowLeft" className="size-[18px]" /> Back
             </button>
           ) : (
-            <span className="text-sm font-semibold text-forest-700">Book your plan</span>
+            <span className="text-sm font-semibold text-forest-700">{single ? "Book one-time cleaning" : "Book your plan"}</span>
           )}
           <span className="text-sm font-medium text-ink-600">{step === 5 ? "Review & confirm" : `Step ${step} of 4 · ${STEPS[step - 1]}`}</span>
         </div>
@@ -237,9 +254,9 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
 
       {plan && step > 1 && step < 5 && (
         <div className="mt-4 flex items-center justify-between rounded-2xl bg-leaf-100 px-4 py-3 text-sm">
-          <span className="font-semibold text-forest-900">{plan.label} plan</span>
+          <span className="font-semibold text-forest-900">{planName}</span>
           <span className="font-display tabular text-lg font-extrabold text-forest-900">
-            {formatINR(plan.price)}<span className="font-sans text-xs font-medium text-ink-600">/month</span>
+            {formatINR(price)}<span className="font-sans text-xs font-medium text-ink-600">{priceUnit}</span>
           </span>
         </div>
       )}
@@ -247,10 +264,30 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
       <div key={step} className="animate-rise pb-32 pt-5">
         {step === 1 && (
           <section>
-            <h1 className="text-[28px] font-extrabold leading-tight text-forest-900">Which vehicle do you want cleaned?</h1>
-            <p className="mt-1 text-ink-600">Your monthly price is shown on each option.</p>
+            {!oneTime.hidden && (
+              <div className="mb-6 grid grid-cols-2 gap-2 rounded-2xl bg-cream-100 p-1.5" role="radiogroup" aria-label="Type of service">
+                {([
+                  ["subscription", "Monthly plan", "Scheduled cleaning"],
+                  ["one_time", "One-time clean", `${formatINR(oneTime.price)} · inside & out`],
+                ] as const).map(([svc, title, sub]) => (
+                  <button
+                    key={svc}
+                    type="button"
+                    role="radio"
+                    aria-checked={data.service === svc}
+                    onClick={() => chooseService(svc)}
+                    className={"min-h-14 rounded-xl px-3 py-2 text-left transition " + (data.service === svc ? "bg-white shadow-[var(--shadow-card)]" : "")}
+                  >
+                    <span className="block font-bold leading-tight text-forest-900">{title}</span>
+                    <span className="block text-xs text-ink-600">{sub}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <h1 className="text-[28px] font-extrabold leading-tight text-forest-900">{single ? "Which car do you want cleaned?" : "Which vehicle do you want cleaned?"}</h1>
+            <p className="mt-1 text-ink-600">{single ? `Interior + exterior in one visit. ${formatINR(oneTime.price)} for any car.` : "Your monthly price is shown on each option."}</p>
             <div className="mt-5 grid grid-cols-2 gap-3" role="radiogroup" aria-label="Vehicle type">
-              {plans.map((p) => {
+              {vehicles.map((p) => {
                 const active = data.vehicle === p.vehicle;
                 return (
                   <button
@@ -261,10 +298,10 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
                     onClick={() => {
                       set("vehicle", p.vehicle);
                       track("vehicle_selected", { vehicle: p.vehicle, location: "form" });
-                      track("plan_viewed", { vehicle: p.vehicle, price: p.price, location: "form" });
+                      track("plan_viewed", { vehicle: p.vehicle, price: single ? oneTime.price : p.price, service: data.service, location: "form" });
                     }}
                     className={
-                      "relative overflow-hidden rounded-2xl border-2 bg-white text-left transition last:col-span-2 " +
+                      "relative overflow-hidden rounded-2xl border-2 bg-white text-left transition " + (vehicles.length % 2 ? "last:col-span-2 " : "") +
                       (active ? "border-forest-700 shadow-[var(--shadow-card)]" : "border-cream-200")
                     }
                   >
@@ -274,7 +311,7 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
                     <div className="flex items-end justify-between gap-2 p-3">
                       <div>
                         <p className="font-bold leading-tight text-forest-900">{p.label}</p>
-                        <p className="tabular mt-0.5 text-sm font-semibold text-forest-700">{formatINR(p.price)}<span className="font-normal text-ink-600">/mo</span></p>
+                        <p className="tabular mt-0.5 text-sm font-semibold text-forest-700">{formatINR(single ? oneTime.price : p.price)}<span className="font-normal text-ink-600">{single ? " once" : "/mo"}</span></p>
                       </div>
                       <span className={"grid size-6 shrink-0 place-items-center rounded-full border-2 " + (active ? "border-forest-700 bg-forest-700 text-white" : "border-cream-200")}>
                         {active && <Icon name="check" className="size-3.5" strokeWidth={3} />}
@@ -286,11 +323,11 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
             </div>
             <FieldError msg={errors.vehicle} />
 
-            {plan && (
+            {(plan || single) && (
               <div className="mt-5 rounded-2xl border border-leaf-200 bg-white p-4">
-                <p className="text-sm font-bold text-forest-900">Included in {plan.label} plan</p>
+                <p className="text-sm font-bold text-forest-900">Included in {single ? "one-time cleaning" : plan!.label + " plan"}</p>
                 <ul className="mt-2 space-y-1.5 text-sm text-ink-600">
-                  {plan.inclusions.map((i) => (
+                  {(single ? oneTime.inclusions : plan!.inclusions).map((i) => (
                     <li key={i} className="flex gap-2">
                       <Icon name="check" className="mt-0.5 size-4 shrink-0 text-leaf-400" strokeWidth={2.5} /> {i}
                     </li>
@@ -384,10 +421,10 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
 
         {step === 4 && (
           <section>
-            <h1 className="text-[28px] font-extrabold leading-tight text-forest-900">When should we start?</h1>
-            <p className="mt-1 text-ink-600">Pick a start date. A few optional details help our team.</p>
+            <h1 className="text-[28px] font-extrabold leading-tight text-forest-900">{single ? "When should we come?" : "When should we start?"}</h1>
+            <p className="mt-1 text-ink-600">{single ? "Pick a date for the cleaning." : "Pick a start date."} A few optional details help our team.</p>
             <div className="mt-6 space-y-5">
-              <Field label="Preferred start date" error={errors.startDate}>
+              <Field label={single ? "Preferred date" : "Preferred start date"} error={errors.startDate}>
                 <input className="field" type="date" min={tomorrow()} value={data.startDate} onChange={(e) => set("startDate", e.target.value)} />
               </Field>
               <Field label="Preferred cleaning time" optional>
@@ -428,12 +465,12 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
             <div className="mt-5 overflow-hidden rounded-2xl bg-forest-900 text-white">
               <div className="flex items-center gap-4 p-4">
                 <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-xl">
-                  <Image src={plan.image} alt="" fill sizes="96px" className="object-cover" />
+                  <Image src={single ? oneTime.image : plan.image} alt="" fill sizes="96px" className="object-cover" />
                 </div>
                 <div>
-                  <p className="text-sm text-white/70">{plan.label} plan{data.vehicleCount > 1 ? ` × ${data.vehicleCount}` : ""}</p>
+                  <p className="text-sm text-white/70">{planName}{data.vehicleCount > 1 ? ` × ${data.vehicleCount}` : ""}</p>
                   <p className="font-display tabular text-3xl font-extrabold">
-                    {formatINR(plan.price * data.vehicleCount)}<span className="font-sans text-sm font-medium text-white/70">/month</span>
+                    {formatINR(price * data.vehicleCount)}<span className="font-sans text-sm font-medium text-white/70">{priceUnit}</span>
                   </p>
                 </div>
               </div>
@@ -443,7 +480,7 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
               <Summary title="Vehicle" onEdit={() => setStep(1)} rows={[plan.label, data.vehicleModel, data.vehicleCount > 1 ? `${data.vehicleCount} vehicles` : ""]} />
               <Summary title="Contact" onEdit={() => setStep(2)} rows={[data.name, "+91 " + data.mobile, !data.sameWhatsapp && data.whatsapp ? "WhatsApp: +91 " + data.whatsapp : ""]} />
               <Summary title="Location" onEdit={() => setStep(3)} rows={[data.society, data.towerFlat, data.locality, [data.parkingType, data.parkingSlot].filter(Boolean).join(" · ")]} />
-              <Summary title="Schedule" onEdit={() => setStep(4)} rows={["Start: " + formatDate(data.startDate), data.preferredTime, data.notes]} />
+              <Summary title="Schedule" onEdit={() => setStep(4)} rows={[(single ? "Date: " : "Start: ") + formatDate(data.startDate), data.preferredTime, data.notes]} />
             </div>
 
             <input type="text" name="company" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} className="absolute -left-[9999px] size-px opacity-0" aria-hidden="true" />
@@ -490,7 +527,7 @@ export function BookingForm({ initialVehicle }: { initialVehicle?: VehicleType }
 
             <ol className="mt-6 space-y-3 rounded-2xl border border-leaf-200 p-4 text-sm text-ink-600">
               <p className="font-bold text-forest-900">What happens next</p>
-              {["We check availability in your society", "You get a secure payment link on WhatsApp", "Your scheduled cleaning starts"].map((t, i) => (
+              {["We check availability in your society", "You get a secure payment link on WhatsApp", single ? "We clean your car on your chosen date" : "Your scheduled cleaning starts"].map((t, i) => (
                 <li key={t} className="flex items-center gap-3">
                   <span className="grid size-6 shrink-0 place-items-center rounded-full bg-leaf-100 text-xs font-bold text-forest-700">{i + 1}</span>
                   {t}

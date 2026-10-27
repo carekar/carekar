@@ -48,6 +48,8 @@
 
 > Note: weekly interior cleaning applies to cars. Bike/Scooty plan inclusions to be confirmed by client (see §19).
 
+**One-time car cleaning: ₹249** (interior + exterior, single visit, same price for every car type, not offered for bikes). Price and visibility are editable in admin Settings. It's stored on the booking as `service = one_time` and excluded from MRR and renewals. Shown as a card below the monthly plans, as a "Monthly plan / One-time clean" switch on step 1 of the booking form (`/book?service=one_time`), and in the FAQ and structured data.
+
 ### Copy
 - **Headline:** Your Car. Our Care.
 - **Subheadline:** Premium, hassle-free vehicle cleaning at your doorstep. Enjoy a cleaner vehicle without the daily effort.
@@ -358,6 +360,14 @@ Order is designed for a scrolling thumb; a Book/WhatsApp action is never more th
 - **Performance:** the Firebase SDK loads only on `/login` and on the Review step. The header button reads a small local copy of the name, so the homepage stays light.
 - **Firebase console setup:** enable the Google provider, and add every website domain (e.g. `carekar.in`, the Netlify URL) under Authentication → Settings → Authorized domains.
 
+### My bookings (`/account`)
+- Opened from the header (shows "Hi, {name}" once logged in), the login page, and the thank-you page ("View my bookings"). Logged-out visitors see the Google login panel in place.
+- **Running subscriptions:** monthly plans with status Active, showing plan, monthly price, start date, next renewal (30 days after the last successful payment), location, and a WhatsApp link to pause, change or cancel.
+- **All bookings:** every booking made while logged in, newest first: service, ref, booked date, price (per month or one-time), start/cleaning date, location, payments, and a customer-friendly status ("Request received", "Available in your society", "Payment pending", "Active" / "Confirmed" for one-time, "Not available yet", etc.).
+- **Privacy:** `GET /api/me/bookings` verifies the Firebase ID token and returns only bookings with that Google account's `customer_uid`. Team notes, lost reasons and tracking data are never sent.
+- Bookings made without logging in (callback requests, or bookings from before login was added) don't appear; the page says so and links to WhatsApp.
+- Later: pause / renew / pay online from this page once Razorpay is live.
+
 ### After submit (`/book/thank-you`)
 - "Thanks, {name}! We'll confirm availability in {society} within X hours."
 - Lead reference ID (e.g. `CK-1042`)
@@ -614,7 +624,7 @@ The schema lives in `server/prisma/schema.prisma`, and migrations in `server/pri
 
 | Model → table | Holds | Notes |
 |---|---|---|
-| `Lead` → `leads` | Every booking request | `ref` = `CK-1001…` from sequence `lead_ref_seq`; `vehicle` and `status` are Postgres enums; price snapshot `plan_price`; status `history` and `team_notes` as JSON; attribution `visitor_id`, `first_touch`, `last_touch`, `device`, `in_app`; Google account `customer_uid`, `customer_email`, `customer_name` (migration 0002); `demo` flag |
+| `Lead` → `leads` | Every booking request | `ref` = `CK-1001…` from sequence `lead_ref_seq`; `vehicle` and `status` are Postgres enums; price snapshot `plan_price`; status `history` and `team_notes` as JSON; attribution `visitor_id`, `first_touch`, `last_touch`, `device`, `in_app`; Google account `customer_uid`, `customer_email`, `customer_name` (migration 0002); `service` enum `subscription` / `one_time` (migration 0003); `demo` flag |
 | `Session` → `sessions` | One website visit | channel, UTM source/medium/campaign/content, landing page, referrer, device/OS/browser, in-app browser, returning visitor |
 | `Event` → `events` | Funnel events (page views, plan clicks, form steps, submit, status changes) | `props` JSON; indexed by time, visitor and lead |
 | `Payment` → `payments` | Payments per lead | `razorpay_payment_id` unique (idempotent webhooks), `razorpay_subscription_id`; cascades when a lead is deleted |
@@ -737,7 +747,8 @@ carekar/
 | `GET /health` | anyone | Uptime / keep-alive check |
 | `GET /api/config` | public | Prices, visible plans, contact, societies |
 | `POST /api/events` | public (browser beacon) | Funnel tracking events + session attribution |
-| `POST /api/leads` | public (booking form) | Validate (zod), dedupe within 24 h, save, Telegram alert. Honeypot + rate limit (8 per IP per 10 min) |
+| `POST /api/leads` | public (booking form) | Validate (zod), price from settings (monthly plan or one-time), Google login required unless callback, dedupe within 24 h (same mobile + vehicle + service), save, Telegram alert. Honeypot + rate limit (8 per IP per 10 min) |
+| `GET /api/me/bookings` | logged-in customer (Firebase token) | The customer's own bookings, status and payments for `/account` |
 | `GET /api/admin/me` | team | Who is logged in + role |
 | `GET /api/admin/data` | team | Leads, sessions, events (last ~6 months), payments (owner only) |
 | `POST /api/admin/leads/:id/status` | team | Change pipeline status (+ lost reason) |
@@ -772,7 +783,7 @@ carekar/
 | **3. Payments** | Razorpay plans, subscription + payment link creation, webhook, payments page, MRR | Online payments live (after KYC) |
 | **4. Funnel analytics** | Event tracking is wired in from Phase 1 (so no data is lost); this phase builds the dashboards: funnel overview, breakdowns, form field analytics, sales/ops funnel, retention cohorts, abandoned bookings, session journeys, QR/link builder, alerts & weekly email, Clarity | Detailed drop-off visibility |
 | **5. Polish & launch** | Real-device testing, performance tuning, Google Business Profile, domain, go-live | Production launch |
-| **Later** | WhatsApp Business API automation, per-society SEO pages, customer account area on top of the Google login (view subscription, pause, renew), staff visit-tracking app | — |
+| **Later** | WhatsApp Business API automation, per-society SEO pages, self-service on the My bookings page (pause, renew, pay online), staff visit-tracking app | — |
 
 ---
 

@@ -56,6 +56,20 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <p className="mt-2 text-xs text-ink-400">New prices apply to new bookings. Existing leads keep the price they booked at.</p>
         </Card>
 
+        <Card title="One-time car cleaning (interior + exterior)">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span className="min-w-28 flex-1 text-sm text-ink-600">Same price for every car type. Not offered for bikes.</span>
+            <label className="flex items-center gap-2">
+              <span className="text-ink-400">₹</span>
+              <input name="oneTimePrice" type="number" inputMode="numeric" min={1} max={100000} required defaultValue={config.oneTime.price} className="field !min-h-11 w-28 !py-2" aria-label="One-time cleaning price" />
+            </label>
+            <label className="flex min-h-11 items-center gap-2 text-sm text-ink-600">
+              <input type="checkbox" name="oneTimeHidden" defaultChecked={config.oneTime.hidden} className="size-5 accent-forest-700" />
+              Hide on site
+            </label>
+          </div>
+        </Card>
+
         <Card title="Contact details">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">

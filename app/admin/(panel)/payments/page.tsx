@@ -15,7 +15,7 @@ export default async function Payments({ searchParams }: { searchParams: Promise
   const subs = subscriptionStats(db);
   const leads = new Map(db.leads.map((l) => [l.id, l]));
   const renewals = db.leads
-    .filter((l) => l.status === "active")
+    .filter((l) => l.status === "active" && l.service !== "one_time") // one-time cleanings don't renew
     .map((l) => {
       const last = db.payments.filter((p) => p.leadId === l.id && p.status === "captured").sort((a, b) => b.at.localeCompare(a.at))[0];
       return { l, next: last ? Date.parse(last.at) + 30 * 86400000 : null };

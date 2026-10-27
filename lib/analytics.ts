@@ -130,7 +130,8 @@ export function overviewKpis(db: DB, r: Range) {
 }
 
 export function subscriptionStats(db: DB) {
-  const active = db.leads.filter((l) => l.status === "active");
+  // one-time cleanings are not recurring revenue
+  const active = db.leads.filter((l) => l.status === "active" && l.service !== "one_time");
   const mrr = active.reduce((s, l) => s + l.planPrice * (l.vehicleCount || 1), 0);
   return { active: active.length, mrr };
 }

@@ -3,19 +3,20 @@ import Image from "next/image";
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { TrackedLink } from "@/components/site/TrackedLink";
-import { findPlan, waHref } from "@/lib/config";
+import { findPlan, serviceLabel, waHref } from "@/lib/config";
 import { getConfig } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Booking received", robots: { index: false } };
 
-type Params = { ref?: string; n?: string; v?: string; s?: string; c?: string };
+type Params = { ref?: string; n?: string; v?: string; s?: string; c?: string; t?: string };
 
 export default async function ThankYou({ searchParams }: { searchParams: Promise<Params> }) {
-  const { ref = "", n = "", v, s = "", c } = await searchParams;
+  const { ref = "", n = "", v, s = "", c, t } = await searchParams;
   const config = await getConfig();
   const plan = findPlan(config, v);
   const callback = c === "1";
-  const message = `Hi Carekar, I just booked${ref ? ` — Ref ${ref}` : ""}${plan ? `, ${plan.label} plan` : ""}${s ? `, ${s}` : ""}.`;
+  const single = t === "one_time";
+  const message = `Hi Carekar, I just booked${ref ? ` — Ref ${ref}` : ""}${plan ? `, ${serviceLabel(config, single ? "one_time" : "subscription", v)}` : ""}${s ? `, ${s}` : ""}.`;
 
   return (
     <div className="mx-auto max-w-xl px-4 pb-16 pt-8">
@@ -47,7 +48,7 @@ export default async function ThankYou({ searchParams }: { searchParams: Promise
           {[
             ["Availability check", "We confirm we service your society."],
             ["Payment link on WhatsApp", "Pay securely via UPI, card or netbanking."],
-            ["Cleaning starts", "From your preferred start date."],
+            single ? ["Cleaning visit", "On your chosen date, interior + exterior."] : ["Cleaning starts", "From your preferred start date."],
           ].map(([t, d], i) => (
             <li key={t} className="flex gap-3">
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-forest-700 text-sm font-bold text-white">{i + 1}</span>
@@ -64,7 +65,12 @@ export default async function ThankYou({ searchParams }: { searchParams: Promise
         <Image src="/images/exterior-wash.webp" alt="" fill sizes="(min-width:640px) 576px, 100vw" className="object-cover" />
       </div>
 
-      <Link href="/" className="btn-outline mt-6 w-full">Back to home</Link>
+      {!callback && (
+        <Link href="/account" className="btn-primary mt-6 w-full">
+          <Icon name="list" className="size-[18px]" /> View my bookings
+        </Link>
+      )}
+      <Link href="/" className="btn-outline mt-3 w-full">Back to home</Link>
     </div>
   );
 }

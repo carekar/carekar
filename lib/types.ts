@@ -97,6 +97,7 @@ export type Settings = {
   contact?: { phone?: string; whatsapp?: string; email?: string };
   prices?: Partial<Record<VehicleType, number>>;
   hiddenPlans?: VehicleType[];
+  oneTime?: { price?: number; hidden?: boolean };
   societies?: string[];
 };
 
@@ -112,3 +113,26 @@ export type LeadMeta = {
   customer?: { uid: string; email?: string; name?: string };
 };
 export type LeadFields = Omit<LeadInput, "consent">;
+
+/** What a logged-in customer sees about their own booking on /account (no team notes or tracking data). */
+export type CustomerBooking = Pick<
+  Lead,
+  "ref" | "createdAt" | "service" | "vehicle" | "vehicleModel" | "vehicleCount" | "planPrice" | "status" | "startDate" | "society" | "towerFlat" | "callbackRequested"
+> & {
+  /** status changes, oldest first */
+  timeline: { at: string; to: LeadStatus }[];
+  payments: Pick<Payment, "amount" | "status" | "at" | "method">[];
+};
+
+/** Customer-facing wording for each pipeline status. */
+export const customerStatus: Record<LeadStatus, { label: string; detail: string; tone: "pending" | "good" | "muted" | "bad" }> = {
+  new: { label: "Request received", detail: "We're checking availability in your society.", tone: "pending" },
+  contacted: { label: "We've contacted you", detail: "Our team has reached out on WhatsApp or phone.", tone: "pending" },
+  availability_confirmed: { label: "Available in your society", detail: "Your payment link is on its way.", tone: "pending" },
+  payment_link_sent: { label: "Payment pending", detail: "Pay using the secure link we sent on WhatsApp.", tone: "pending" },
+  active: { label: "Active", detail: "Your cleaning is scheduled.", tone: "good" },
+  not_serviceable: { label: "Not available yet", detail: "We don't service your society yet. We'll let you know when we do.", tone: "bad" },
+  paused: { label: "Paused", detail: "Message us on WhatsApp to resume.", tone: "muted" },
+  cancelled: { label: "Cancelled", detail: "This booking was cancelled.", tone: "muted" },
+  lost: { label: "Closed", detail: "This request is closed. Book again any time.", tone: "muted" },
+};

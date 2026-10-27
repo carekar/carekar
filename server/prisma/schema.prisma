@@ -21,6 +21,11 @@ enum Vehicle {
   bike
 }
 
+enum Service {
+  subscription
+  one_time
+}
+
 enum LeadStatus {
   new
   contacted
@@ -48,6 +53,8 @@ model Lead {
   id                String     @id @default(dbgenerated("(gen_random_uuid())::text"))
   ref               String     @unique @default(dbgenerated("('CK-'::text || nextval('lead_ref_seq'::regclass))"))
   createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// monthly subscription, or a one-time car cleaning (interior + exterior)
+  service           Service    @default(subscription)
   vehicle           Vehicle
   vehicleModel      String?    @map("vehicle_model")
   vehicleCount      Int        @default(1) @map("vehicle_count")

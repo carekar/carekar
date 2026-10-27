@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { leadSchema } from "../../../lib/validation";
-import { findPlan } from "../../../lib/config";
+import { leadSchema, oneTimeVehicleError } from "../../../lib/validation";
+import { priceFor, serviceLabel } from "../../../lib/config";
 import type { LeadMeta, Session, TrackEvent } from "../../../lib/types";
 import { repo } from "../repo";
 import { getConfig } from "../settings";
@@ -111,6 +111,9 @@ publicRoutes.post("/leads", async (req, res) => {
     return void res.status(422).json({ error: "Please check your details", fields: parsed.error.flatten().fieldErrors });
   }
   const { consent: _consent, ...fields } = parsed.data;
+  const config = await getConfig();
+  const vehicleError = oneTimeVehicleError(fields) || (fields.service === "one_time" && config.oneTime.hidden ? "One-time cleaning isn't available right now" : undefined);
+  if (vehicleError) return void res.status(422).json({ error: vehicleError, fields: { vehicle: [vehicleError] } });
 
   // Confirming a booking needs a Google login (Firebase). A callback request doesn't.
   const customer = await customerFromToken(req.get("authorization")?.replace(/^Bearer\s+/i, ""));
@@ -118,7 +121,7 @@ publicRoutes.post("/leads", async (req, res) => {
     return void res.status(401).json({ error: "Please log in with Google to confirm your booking.", login: true });
   }
 
-  const plan = findPlan(await getConfig(), fields.vehicle)!;
+  const price = priceFor(config, fields.service, fields.vehicle)!;
   const meta = (body.meta || {}) as LeadMeta;
   const clean: LeadMeta = {
     customer: customer ?? undefined,
@@ -132,12 +135,22 @@ publicRoutes.post("/leads", async (req, res) => {
 
   let result;
   try {
-    result = await repo().submitLead(fields, plan.price, clean);
+    result = await repo().submitLead(fields, price, clean);
   } catch (err) {
     console.error("[leads]", err);
     return void res.status(500).json({ error: "Something went wrong. Please WhatsApp or call us." });
   }
 
-  if (!result.duplicate) await notifyNewLead({ ...fields, ref: result.ref, id: result.id, price: plan.price, planLabel: plan.label, channel: clean.first?.channel });
+  if (!result.duplicate) {
+    await notifyNewLead({
+      ...fields,
+      ref: result.ref,
+      id: result.id,
+      price,
+      oneTime: fields.service === "one_time",
+      planLabel: serviceLabel(config, fields.service, fields.vehicle),
+      channel: clean.first?.channel,
+    });
+  }
   res.json({ ref: result.ref, id: result.id });
 });

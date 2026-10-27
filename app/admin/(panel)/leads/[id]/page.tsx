@@ -6,6 +6,7 @@ import { journey } from "@/lib/analytics";
 import { Card, StatusPill, inr, istDateTime, timeAgo } from "@/components/admin/ui";
 import { Icon } from "@/components/Icon";
 import { planByVehicle } from "@/lib/site";
+import { isOneTime, leadPlanLabel, leadPriceLabel } from "@/lib/leads";
 import { addNote, updateStatus } from "../../../actions";
 
 export const metadata = { title: "Lead" };
@@ -48,11 +49,12 @@ const quiet = new Set(["page_view", "scroll_depth", "section_view", "form_step_v
 function templates(l: Lead) {
   const first = l.name.split(" ")[0];
   const plan = planByVehicle(l.vehicle);
+  const what = isOneTime(l) ? `one-time car cleaning (${plan?.label}) is ${inr(l.planPrice)}` : `${plan?.label} plan is ${inr(l.planPrice)}/month`;
   return [
     ["Booking received", `Hi ${first}, thank you for booking with Carekar (Ref ${l.ref}). We're checking availability in ${l.society} and will confirm shortly.`],
-    ["Availability confirmed", `Good news ${first}! Carekar is available in ${l.society}. Your ${plan?.label} plan is ${inr(l.planPrice)}/month. We'll share a secure payment link to start your subscription.`],
-    ["Payment link", `Hi ${first}, here is your secure payment link for the Carekar ${plan?.label} plan (${inr(l.planPrice)}/month): [Razorpay link]`],
-    ["Payment received", `Thank you ${first}! Payment received. Your Carekar cleaning starts on ${l.startDate}. We'll keep you updated here on WhatsApp.`],
+    ["Availability confirmed", `Good news ${first}! Carekar is available in ${l.society}. Your ${what}. We'll share a secure payment link to confirm your booking.`],
+    ["Payment link", `Hi ${first}, here is your secure payment link for your Carekar ${isOneTime(l) ? `one-time car cleaning (${inr(l.planPrice)})` : `${plan?.label} plan (${inr(l.planPrice)}/month)`}: [Razorpay link]`],
+    ["Payment received", `Thank you ${first}! Payment received. Your Carekar cleaning ${isOneTime(l) ? "is booked for" : "starts on"} ${l.startDate}. We'll keep you updated here on WhatsApp.`],
     ["Not serviceable yet", `Hi ${first}, thank you for your interest in Carekar. We don't service ${l.society} yet, but we'll message you as soon as we launch there.`],
   ] as const;
 }
@@ -95,7 +97,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-sm">
           <span className="rounded-full bg-leaf-100 px-3 py-1 font-semibold text-forest-900">
-            {plan?.label} · {inr(lead.planPrice)}/mo{lead.vehicleCount > 1 ? ` × ${lead.vehicleCount}` : ""}
+            {leadPlanLabel(lead)} · {leadPriceLabel(lead)}{lead.vehicleCount > 1 ? ` × ${lead.vehicleCount}` : ""}
           </span>
           {lead.callbackRequested && <span className="rounded-full bg-sun-400/30 px-3 py-1 font-semibold text-forest-900">📞 Callback requested</span>}
           {lead.demo && <span className="rounded-full bg-cream-200 px-3 py-1 text-ink-600">Demo</span>}
@@ -127,7 +129,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                 ["Tower / flat", lead.towerFlat],
                 ["Locality", lead.locality],
                 ["Parking", [lead.parkingType, lead.parkingSlot].filter(Boolean).join(" · ")],
-                ["Start date", lead.startDate],
+                [isOneTime(lead) ? "Cleaning date" : "Start date", lead.startDate],
                 ["Preferred time", lead.preferredTime],
                 ["Heard from", lead.heardFrom],
                 ["Notes", lead.notes],

@@ -53,7 +53,8 @@ export const fileRepo: Repo = {
       const now = new Date().toISOString();
       const dayAgo = Date.now() - 86400000;
       const existing = db.leads.find(
-        (l) => !l.demo && l.mobile === fields.mobile && l.vehicle === fields.vehicle && Date.parse(l.createdAt) > dayAgo,
+        (l) =>
+          !l.demo && l.mobile === fields.mobile && l.vehicle === fields.vehicle && (l.service ?? "subscription") === fields.service && Date.parse(l.createdAt) > dayAgo,
       );
       const customer = customerFields(meta);
       let lead: Lead;
@@ -132,4 +133,13 @@ export const fileRepo: Repo = {
     mutate((db) => {
       db.settings = settings;
     }),
+
+  customerBookings: async (uid) => {
+    const db = await read();
+    return db.leads
+      .filter((l) => !l.demo && l.customerUid === uid)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 50)
+      .map((lead) => ({ lead, payments: db.payments.filter((p) => p.leadId === lead.id) }));
+  },
 };

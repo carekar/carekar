@@ -4,7 +4,7 @@ import { getAdmin } from "@/lib/admin";
 import { businessFunnel, dailySeries, makeRange, needsAction, overviewKpis, pct, previousRange, subscriptionStats } from "@/lib/analytics";
 import { Card, Columns, FunnelBars, Kpi, PageHeader, RangeTabs, StatusPill, inr, timeAgo } from "@/components/admin/ui";
 import { Icon } from "@/components/Icon";
-import { planByVehicle } from "@/lib/site";
+import { leadPlanLabel } from "@/lib/leads";
 
 export const metadata = { title: "Overview" };
 
@@ -92,7 +92,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold text-ink-900">{l.name}</span>
                     <span className="block truncate text-xs text-ink-400">
-                      {planByVehicle(l.vehicle)?.label} · {l.society} · {timeAgo(l.createdAt)}
+                      {leadPlanLabel(l)} · {l.society} · {timeAgo(l.createdAt)}
                     </span>
                   </span>
                   <StatusPill status={l.status} />

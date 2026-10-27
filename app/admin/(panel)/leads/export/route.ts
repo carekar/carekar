@@ -5,7 +5,7 @@ export async function GET(req: Request) {
   const sp = Object.fromEntries(new URL(req.url).searchParams);
   const db = await readDB();
   const rows = filterLeads(db.leads, sp);
-  const cols = ["ref", "createdAt", "status", "name", "mobile", "whatsapp", "vehicle", "vehicleModel", "vehicleCount", "planPrice", "society", "towerFlat", "locality", "parkingType", "parkingSlot", "startDate", "preferredTime", "vehicleColour", "registrationNo", "heardFrom", "notes", "callbackRequested", "customerEmail", "source", "campaign"] as const;
+  const cols = ["ref", "createdAt", "status", "service", "name", "mobile", "whatsapp", "vehicle", "vehicleModel", "vehicleCount", "planPrice", "society", "towerFlat", "locality", "parkingType", "parkingSlot", "startDate", "preferredTime", "vehicleColour", "registrationNo", "heardFrom", "notes", "callbackRequested", "customerEmail", "source", "campaign"] as const;
   const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const csv = [
     cols.join(","),

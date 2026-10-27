@@ -24,7 +24,7 @@ const reasons: { icon: IconName; text: string }[] = [
 ];
 
 export default async function Home() {
-  const { contact, plans } = await getConfig();
+  const { contact, plans, oneTime } = await getConfig();
   const telLink = telHref(contact.phone);
   const waLink = (text: string) => waHref(contact.whatsapp, text);
   const jsonLd = {
@@ -37,13 +37,16 @@ export default async function Home() {
         telephone: "+91" + contact.phone,
         areaServed: site.areaFull,
         address: { "@type": "PostalAddress", addressLocality: site.area, addressRegion: "Uttar Pradesh", addressCountry: "IN" },
-        makesOffer: plans.map((p) => ({
-          "@type": "Offer",
-          name: `${p.label} cleaning plan`,
-          price: p.price,
-          priceCurrency: "INR",
-          priceSpecification: { "@type": "UnitPriceSpecification", price: p.price, priceCurrency: "INR", unitText: "MONTH" },
-        })),
+        makesOffer: [
+          ...plans.map((p) => ({
+            "@type": "Offer",
+            name: `${p.label} cleaning plan`,
+            price: p.price,
+            priceCurrency: "INR",
+            priceSpecification: { "@type": "UnitPriceSpecification", price: p.price, priceCurrency: "INR", unitText: "MONTH" },
+          })),
+          ...(oneTime.hidden ? [] : [{ "@type": "Offer", name: `${oneTime.label} (interior + exterior)`, price: oneTime.price, priceCurrency: "INR" }]),
+        ],
       },
       {
         "@type": "FAQPage",
@@ -152,6 +155,39 @@ export default async function Home() {
           <div className="mt-6 md:mt-10">
             <PlanPicker />
           </div>
+
+          {!oneTime.hidden && (
+            <article id="one-time" data-section="one_time" className="card mt-6 grid scroll-mt-20 overflow-hidden md:mt-10 md:grid-cols-[2fr_3fr]">
+              <div className="relative aspect-[16/9] bg-cream-100 md:aspect-auto">
+                <Image src={oneTime.image} alt="Car interior being cleaned" fill sizes="(min-width:768px) 40vw, 100vw" className="object-cover" />
+                <span className="absolute left-3 top-3 rounded-full bg-sun-400 px-3 py-1 text-xs font-bold text-forest-900">No subscription</span>
+              </div>
+              <div className="flex flex-col p-5 md:p-7">
+                <p className="eyebrow">Just once?</p>
+                <h3 className="mt-1 text-2xl font-extrabold leading-tight text-forest-900 md:text-3xl">{oneTime.label}</h3>
+                <p className="mt-1 text-ink-600">Interior and exterior in a single visit, for any car. Try us before you subscribe.</p>
+                <p className="font-display tabular mt-4 text-[40px] font-extrabold leading-none text-forest-900">
+                  {"₹" + oneTime.price.toLocaleString("en-IN")}
+                  <span className="ml-1 font-sans text-base font-medium text-ink-600">one-time</span>
+                </p>
+                <ul className="mt-4 grid gap-2 text-sm text-ink-600 sm:grid-cols-2">
+                  {oneTime.inclusions.map((i) => (
+                    <li key={i} className="flex gap-2">
+                      <Icon name="check" className="mt-0.5 size-4 shrink-0 text-leaf-400" strokeWidth={2.5} /> {i}
+                    </li>
+                  ))}
+                </ul>
+                <TrackedLink
+                  href="/book?service=one_time"
+                  event="book_clicked"
+                  props={{ location: "one_time_card", service: "one_time" }}
+                  className="btn-primary mt-5 w-full md:w-auto md:self-start md:px-8"
+                >
+                  Book one-time cleaning <Icon name="arrowRight" className="size-[18px]" />
+                </TrackedLink>
+              </div>
+            </article>
+          )}
         </div>
       </section>
 

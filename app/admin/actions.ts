@@ -61,6 +61,8 @@ export async function saveSettings(formData: FormData) {
       email: formData.get("email"),
       prices: Object.fromEntries(plans.map((p) => [p.vehicle, formData.get("price_" + p.vehicle)])),
       hiddenPlans: plans.filter((p) => formData.get("hidden_" + p.vehicle)).map((p) => p.vehicle),
+      oneTimePrice: formData.get("oneTimePrice"),
+      oneTimeHidden: !!formData.get("oneTimeHidden"),
       societies: String(formData.get("societies") || "").split("\n"),
     },
   });

@@ -2,8 +2,8 @@ import Link from "next/link";
 import { readDB, leadStatuses, statusLabel, type Lead, type LeadStatus } from "@/lib/store";
 import { PageHeader, StatusPill, Empty, inr, timeAgo } from "@/components/admin/ui";
 import { Icon } from "@/components/Icon";
-import { planByVehicle, plans } from "@/lib/site";
-import { filterLeads, type LeadFilters } from "@/lib/leads";
+import { plans } from "@/lib/site";
+import { filterLeads, leadPlanLabel, leadPriceLabel, type LeadFilters } from "@/lib/leads";
 
 export const metadata = { title: "Leads" };
 
@@ -44,7 +44,7 @@ export default async function Leads({ searchParams }: { searchParams: Promise<SP
         ))}
       </div>
 
-      <details className="mt-2 rounded-xl bg-white p-3 text-sm" open={!!(sp.vehicle || sp.source || sp.callback)}>
+      <details className="mt-2 rounded-xl bg-white p-3 text-sm" open={!!(sp.vehicle || sp.service || sp.source || sp.callback)}>
         <summary className="flex min-h-8 cursor-pointer items-center gap-2 font-semibold text-forest-700">
           <Icon name="funnel" className="size-4" /> More filters
         </summary>
@@ -57,6 +57,11 @@ export default async function Leads({ searchParams }: { searchParams: Promise<SP
           <div className="flex flex-wrap gap-1.5">
             {channels.map((c) => (
               <Link key={c} href={qs({ source: sp.source === c ? undefined : c })} data-active={sp.source === c} className="chip !min-h-9 !px-3 !text-xs">{c}</Link>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {([["subscription", "Monthly plans"], ["one_time", "One-time cleaning"]] as const).map(([v, label]) => (
+              <Link key={v} href={qs({ service: sp.service === v ? undefined : v })} data-active={sp.service === v} className="chip !min-h-9 !px-3 !text-xs">{label}</Link>
             ))}
           </div>
           <Link href={qs({ callback: sp.callback ? undefined : "1" })} data-active={!!sp.callback} className="chip !min-h-9 !px-3 !text-xs">Callback requested</Link>
@@ -78,7 +83,7 @@ export default async function Leads({ searchParams }: { searchParams: Promise<SP
                 <StatusPill status={l.status} />
               </div>
               <p className="mt-2 text-sm text-ink-600">
-                {planByVehicle(l.vehicle)?.label} {l.vehicleModel && `(${l.vehicleModel})`} · <span className="font-semibold text-forest-900">{inr(l.planPrice)}</span>
+                {leadPlanLabel(l)} {l.vehicleModel && `(${l.vehicleModel})`} · <span className="font-semibold text-forest-900">{leadPriceLabel(l)}</span>
               </p>
               <p className="truncate text-sm text-ink-600">{l.society}{l.towerFlat && `, ${l.towerFlat}`}</p>
             </Link>
@@ -102,7 +107,7 @@ export default async function Leads({ searchParams }: { searchParams: Promise<SP
                   <Link href={`/admin/leads/${l.id}`} className="font-semibold text-ink-900 hover:text-forest-700">{l.name}</Link>
                   <p className="text-xs text-ink-400">{l.ref} · +91 {l.mobile}</p>
                 </td>
-                <td className="px-4 py-3">{planByVehicle(l.vehicle)?.label}<p className="text-xs text-ink-400">{inr(l.planPrice)}/mo</p></td>
+                <td className="px-4 py-3">{leadPlanLabel(l)}<p className="text-xs text-ink-400">{leadPriceLabel(l)}</p></td>
                 <td className="px-4 py-3">{l.society}</td>
                 <td className="px-4 py-3 text-ink-600">{l.firstTouch?.channel ?? "—"}</td>
                 <td className="px-4 py-3 text-ink-600">{timeAgo(l.createdAt)}</td>

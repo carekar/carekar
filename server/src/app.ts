@@ -1,6 +1,7 @@
 import express, { type ErrorRequestHandler } from "express";
 import { adminRoutes } from "./routes/admin";
 import { publicRoutes } from "./routes/public";
+import { customerRoutes } from "./routes/customer";
 import { hasSupabaseAuth } from "./auth";
 import { hasDatabase } from "./repo";
 
@@ -30,6 +31,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api", publicRoutes);
+app.use("/api/me", customerRoutes);
 app.use("/api/admin", adminRoutes);
 
 app.use((_req, res) => {
