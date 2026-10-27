@@ -142,4 +142,27 @@ export const fileRepo: Repo = {
       .slice(0, 50)
       .map((lead) => ({ lead, payments: db.payments.filter((p) => p.leadId === lead.id) }));
   },
+
+  listTeam: async () => [...((await read()).team || [])],
+
+  getTeamMember: async (email) => (await read()).team?.find((m) => m.email === email) ?? null,
+
+  saveTeamMember: ({ email, role, addedBy }) =>
+    mutate((db) => {
+      db.team ??= [];
+      const m = db.team.find((x) => x.email === email);
+      if (m) m.role = role;
+      else db.team.push({ email, role, addedBy, createdAt: new Date().toISOString() });
+    }),
+
+  removeTeamMember: (email) =>
+    mutate((db) => {
+      db.team = (db.team || []).filter((m) => m.email !== email);
+    }),
+
+  touchTeamMember: (email, name) =>
+    mutate((db) => {
+      const m = db.team?.find((x) => x.email === email);
+      if (m) Object.assign(m, { lastLoginAt: new Date().toISOString() }, name ? { name } : {});
+    }),
 };

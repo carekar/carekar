@@ -101,7 +101,15 @@ export type Settings = {
   societies?: string[];
 };
 
-export type DB = { leads: Lead[]; events: TrackEvent[]; sessions: Session[]; payments: Payment[]; seq: number; settings?: Settings };
+/** Dashboard access. super_admin = SUPER_ADMIN_EMAILS (manages the team); editor can change things; viewer is read-only. */
+export type AdminRole = "super_admin" | "editor" | "viewer";
+export const roleLabel: Record<AdminRole, string> = { super_admin: "Super admin", editor: "Editor", viewer: "Viewer" };
+export const roleRank: Record<AdminRole, number> = { viewer: 1, editor: 2, super_admin: 3 };
+
+/** A Google account given dashboard access by the super admin. */
+export type TeamMember = { email: string; role: "viewer" | "editor"; name?: string; addedBy: string; createdAt: string; lastLoginAt?: string };
+
+export type DB = { leads: Lead[]; events: TrackEvent[]; sessions: Session[]; payments: Payment[]; seq: number; settings?: Settings; team?: TeamMember[] };
 
 export type LeadMeta = {
   visitorId?: string;

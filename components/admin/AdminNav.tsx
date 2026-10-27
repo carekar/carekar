@@ -3,21 +3,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon, type IconName } from "@/components/Icon";
+import { roleRank, type AdminRole } from "@/lib/types";
 
-const allItems: { href: string; label: string; icon: IconName; ownerOnly?: boolean }[] = [
+const allItems: { href: string; label: string; icon: IconName; min?: AdminRole }[] = [
   { href: "/admin", label: "Overview", icon: "home" },
   { href: "/admin/leads", label: "Leads", icon: "users" },
   { href: "/admin/funnel", label: "Funnel", icon: "funnel" },
-  { href: "/admin/payments", label: "Payments", icon: "wallet", ownerOnly: true },
-  { href: "/admin/settings", label: "More", icon: "settings", ownerOnly: true },
+  { href: "/admin/payments", label: "Payments", icon: "wallet" },
+  { href: "/admin/team", label: "Team", icon: "shield", min: "super_admin" },
+  { href: "/admin/settings", label: "More", icon: "settings", min: "editor" },
 ];
 
 const isActive = (path: string, href: string) => (href === "/admin" ? path === "/admin" : path.startsWith(href));
 
 /** Bottom tab bar on phones, sidebar on desktop. */
-export function AdminNav({ owner }: { owner: boolean }) {
+export function AdminNav({ role }: { role: AdminRole }) {
   const path = usePathname();
-  const items = allItems.filter((i) => owner || !i.ownerOnly);
+  const items = allItems.filter((i) => !i.min || roleRank[role] >= roleRank[i.min]);
   return (
     <>
       <nav className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-cream-200 bg-white md:hidden" aria-label="Admin">

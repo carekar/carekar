@@ -9,7 +9,7 @@ export const metadata = { title: "Payments" };
 
 export default async function Payments({ searchParams }: { searchParams: Promise<{ d?: string }> }) {
   const days = Number((await searchParams).d) || 30;
-  await requireAdmin("owner");
+  await requireAdmin();
   const db = await readDB();
   const s = paymentStats(db, makeRange(days));
   const subs = subscriptionStats(db);

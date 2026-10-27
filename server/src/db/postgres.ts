@@ -1,8 +1,8 @@
 import { prisma } from "./client";
-import { customerFields, eventData, eventFromRow, leadData, leadFromRow, paymentData, paymentFromRow, sessionData, sessionFromRow } from "./mappers";
+import { customerFields, eventData, eventFromRow, fromRow, leadData, leadFromRow, paymentData, paymentFromRow, sessionData, sessionFromRow } from "./mappers";
 import type { Prisma } from "../generated/prisma/client";
 import type { Repo } from "../repo";
-import type { DB, Lead, Settings } from "../../../lib/types";
+import type { DB, Lead, Settings, TeamMember } from "../../../lib/types";
 
 // Supabase Postgres backend, through Prisma (schema: prisma/schema.prisma).
 
@@ -148,5 +148,27 @@ export const postgresRepo: Repo = {
   async saveSettings(settings) {
     const value = settings as Prisma.InputJsonValue;
     await prisma().setting.upsert({ where: { key: "site" }, create: { key: "site", value }, update: { value } });
+  },
+
+  async listTeam() {
+    const rows = await prisma().teamMember.findMany({ orderBy: { createdAt: "asc" } });
+    return rows.map((r) => fromRow<TeamMember>(r));
+  },
+
+  async getTeamMember(email) {
+    const row = await prisma().teamMember.findUnique({ where: { email } });
+    return row ? fromRow<TeamMember>(row) : null;
+  },
+
+  async saveTeamMember({ email, role, addedBy }) {
+    await prisma().teamMember.upsert({ where: { email }, create: { email, role, addedBy }, update: { role } });
+  },
+
+  async removeTeamMember(email) {
+    await prisma().teamMember.deleteMany({ where: { email } });
+  },
+
+  async touchTeamMember(email, name) {
+    await prisma().teamMember.updateMany({ where: { email }, data: { lastLoginAt: new Date(), ...(name ? { name } : {}) } });
   },
 };

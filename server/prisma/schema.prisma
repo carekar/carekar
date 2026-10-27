@@ -164,3 +164,20 @@ model Setting {
   @@map("settings")
 }
 
+enum TeamRole {
+  viewer
+  editor
+}
+
+/// Google accounts allowed into /admin, added by the super admin from the Team page.
+/// The super admin (SUPER_ADMIN_EMAILS, default carekarservice@gmail.com) is not stored here.
+model TeamMember {
+  email       String    @id
+  role        TeamRole  @default(viewer)
+  name        String?
+  addedBy     String    @map("added_by")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastLoginAt DateTime? @map("last_login_at") @db.Timestamptz(6)
+
+  @@map("team_members")
+}

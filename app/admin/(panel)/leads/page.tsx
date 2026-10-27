@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { readDB, leadStatuses, statusLabel, type Lead, type LeadStatus } from "@/lib/store";
+import { can, getAdmin } from "@/lib/admin";
 import { PageHeader, StatusPill, Empty, inr, timeAgo } from "@/components/admin/ui";
 import { Icon } from "@/components/Icon";
 import { plans } from "@/lib/site";
@@ -11,7 +12,7 @@ type SP = LeadFilters;
 
 export default async function Leads({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
-  const db = await readDB();
+  const [db, admin] = await Promise.all([readDB(), getAdmin()]);
   const leads = filterLeads(db.leads, sp);
   const counts = new Map<string, number>();
   for (const l of db.leads) counts.set(l.status, (counts.get(l.status) || 0) + 1);
@@ -24,9 +25,11 @@ export default async function Leads({ searchParams }: { searchParams: Promise<SP
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader title="Leads" subtitle={`${leads.length} of ${db.leads.length} leads`}>
-        <a href={"/admin/leads/export?" + new URLSearchParams(sp as Record<string, string>)} className="btn-outline !min-h-10 !px-4 text-sm">
-          Export CSV
-        </a>
+        {can(admin, "editor") && (
+          <a href={"/admin/leads/export?" + new URLSearchParams(sp as Record<string, string>)} className="btn-outline !min-h-10 !px-4 text-sm">
+            Export CSV
+          </a>
+        )}
       </PageHeader>
 
       <form className="relative" action="/admin/leads">

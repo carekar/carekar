@@ -80,7 +80,7 @@
 | Backend API | **Node.js 22+ / Express 5 + TypeScript** (`server/`) | Separate backend that owns all business logic: bookings, tracking, admin actions, alerts, and later Razorpay |
 | ORM | **Prisma 7** (`@prisma/adapter-pg`) | Typed queries, schema in one file, versioned migrations, Prisma Studio for browsing data |
 | Database | **Supabase Postgres** (free tier, Mumbai region) | Leads, payments, events, settings, admin roles |
-| Admin auth | **One shared team password** | `ADMIN_PASSWORD` on the website; the login cookie carries `ADMIN_TOKEN`, which the API checks on every admin request. No defaults in production. Per-person logins / staff role can be added later if the team grows |
+| Admin auth | **Google sign-in (Firebase Auth) + roles** | Super admin `carekarservice@gmail.com` gives **Viewer** or **Editor** access to any Gmail from the dashboard Team page. The API issues a 30-day session and re-checks the role on every request |
 | Customer login | **Firebase Auth: Google sign-in** | Free, one tap, no password. Required to confirm a booking. The API verifies the ID token with Google's public keys |
 | Payments | **Razorpay** (Subscriptions + Payment Links + Webhooks) | Indian UPI/cards/netbanking, auto-debit support |
 | Hosting (website) | **Netlify free plan** (fallback: Cloudflare Pages) | Commercial use allowed on free tier, HTTPS, CDN |
@@ -104,10 +104,10 @@ Customer's phone ──► Next.js website (Netlify)
                        └─► Google public keys (verify customer logins)
 ```
 
-- **Website** has no database access. It knows `API_URL`, the team password and the admin token (shared with the API).
+- **Website** has no database access and no secrets. It only knows `API_URL` (and Firebase's public web config).
 - **API** is the only thing that talks to the database. Every admin endpoint checks the admin token on every request.
 - Shared code (plans, prices, form validation, data types in `lib/`) is used by both, so the site and API can't disagree on prices or form rules.
-- **Laptop preview:** without `DATABASE_URL` the API stores data in `server/data/db.json`; without `ADMIN_PASSWORD` the local admin uses the preview password `carekar-admin` (never in production).
+- **Laptop preview:** without `DATABASE_URL` the API stores data in `server/data/db.json`; locally the dashboard session secret has a development default (never in production).
 - If the API is unreachable, public pages still render with default prices/contact, and the booking form shows a WhatsApp/call fallback.
 
 ### Monthly cost at launch
@@ -646,7 +646,9 @@ Demo rows (`demo = true`) let the dashboard be previewed and can be cleared from
 **Security:**
 - Only the Express API connects to the database (Prisma, as the database owner). The website holds no database credentials.
 - Row Level Security is enabled on every table with **no policies**, so Supabase's public anon key and REST API can read or write nothing.
-- Admin endpoints compare the bearer token with `ADMIN_TOKEN` (constant-time) on every request. In production a missing or short token (< 24 characters) closes the admin API, and a missing password disables the login.
+- **Dashboard login:** the team member signs in with Google on `/admin/login`. The website sends the Firebase ID token to `POST /api/admin/session`. The API verifies it (Google's public keys, verified email only) and checks the email is a super admin (`SUPER_ADMIN_EMAILS`, default `carekarservice@gmail.com`) or in `team_members` (migration 0005). It then returns a 30-day session token signed with `ADMIN_SESSION_SECRET`, which the website keeps in an httpOnly cookie.
+- **Every admin request** verifies that session and looks the role up again, so removing someone or changing their role applies on their next click. In production a missing or short `ADMIN_SESSION_SECRET` (< 32 characters) closes the dashboard.
+- **Roles:** **Viewer** sees everything (overview, leads, funnel, payments) but can't change anything or export. **Editor** can also change status, add notes, export CSV, edit settings and manage demo data. **Super admin** has everything, plus the **Team** page to add, change or remove access. Enforced by the API, not only hidden in the UI.
 - No Supabase API keys are used at all; the database is reached only through Prisma with `DATABASE_URL`. (The `admin_users` table was removed in migration 0004.)
 
 ---
@@ -707,7 +709,8 @@ carekar/
 │  │  ├─ book/thank-you/page.tsx
 │  │  ├─ privacy-policy/ terms/ refund-cancellation/ contact/ credits/
 │  ├─ admin/
-│  │  ├─ login/                    # shared team password
+│  │  ├─ login/                    # Continue with Google
+│  │  ├─ (panel)/team/             # super admin: give viewer / editor access
 │  │  ├─ (panel)/ overview, leads, leads/[id], leads/export, payments, funnel, settings
 │  │  └─ actions.ts                # form actions → API calls
 │  ├─ sitemap.ts  robots.ts  layout.tsx
@@ -748,13 +751,15 @@ carekar/
 | `POST /api/events` | public (browser beacon) | Funnel tracking events + session attribution |
 | `POST /api/leads` | public (booking form) | Validate (zod), price from settings (monthly plan or one-time), Google login required unless callback, dedupe within 24 h (same mobile + vehicle + service), save, Telegram alert. Honeypot + rate limit (8 per IP per 10 min) |
 | `GET /api/me/bookings` | logged-in customer (Firebase token) | The customer's own bookings, status and payments for `/account` |
-| `GET /api/admin/me` | team | Who is logged in + role |
-| `GET /api/admin/data` | team | Leads, sessions, events (last ~6 months), payments (owner only) |
-| `POST /api/admin/leads/:id/status` | team | Change pipeline status (+ lost reason) |
-| `POST /api/admin/leads/:id/notes` | team | Add a team note |
-| `PUT /api/admin/settings` | owner | Save prices, hidden plans, contact, societies |
-| `POST /api/admin/demo/clear` · `/restore` | owner | Demo data for previews |
-| `POST /api/admin/leads/:id/payment-link` · `POST /api/webhooks/razorpay` | owner · Razorpay | Phase 3 |
+| `POST /api/admin/session` | anyone with Google | Firebase ID token in → 30-day dashboard session (only for the super admin or people on the Team page) |
+| `GET /api/admin/me` | viewer+ | Who is logged in + role |
+| `GET /api/admin/data` | viewer+ | Leads, sessions, events (last ~6 months), payments |
+| `POST /api/admin/leads/:id/status` | editor+ | Change pipeline status (+ lost reason) |
+| `POST /api/admin/leads/:id/notes` | editor+ | Add a team note |
+| `PUT /api/admin/settings` | editor+ | Save prices, hidden plans, one-time price, contact, societies |
+| `POST /api/admin/demo/clear` · `/restore` | editor+ | Demo data for previews |
+| `GET /api/admin/team` · `PUT /api/admin/team` · `DELETE /api/admin/team/:email` | super admin | List, add / change role, remove dashboard access |
+| `POST /api/admin/leads/:id/payment-link` · `POST /api/webhooks/razorpay` | editor+ · Razorpay | Phase 3 |
 
 ### Running locally
 - `npm run dev:api` (or `npm run dev` inside `server/`): API on port 4000.
@@ -765,9 +770,9 @@ carekar/
 | Part | Where | Settings |
 |---|---|---|
 | Database | Supabase (Mumbai) | Run `npm run db:migrate` from `server/` once per schema change |
-| API | Render web service, Singapore | Root directory `server`. Build: `npm ci && npm run build`. Start: `npm start`. Health check: `/health`. Env vars: `NODE_VERSION=24`, `DATABASE_URL`, `DIRECT_URL`, `ADMIN_TOKEN`, `FIREBASE_PROJECT_ID`, `SITE_URL`, optional Telegram |
+| API | Render web service, Singapore | Root directory `server`. Build: `npm ci && npm run build`. Start: `npm start`. Health check: `/health`. Env vars: `NODE_VERSION=24`, `DATABASE_URL`, `DIRECT_URL`, `ADMIN_SESSION_SECRET`, `SUPER_ADMIN_EMAILS`, `FIREBASE_PROJECT_ID`, `SITE_URL`, optional Telegram |
 | Keep-alive | cron-job.org (free) | GET `https://<api>/health` every 10 minutes so the free instance doesn't sleep |
-| Website | Netlify | Build `npm run build`. Env: `NODE_VERSION=24`, `API_URL` = Render URL, `ADMIN_PASSWORD`, `ADMIN_TOKEN` (same as Render), `SITE_URL` |
+| Website | Netlify | Build `npm run build`. Env: `NODE_VERSION=24`, `API_URL` = Render URL, `SITE_URL` |
 | Razorpay webhook (Phase 3) | Points at the API URL directly | `https://<api>/api/webhooks/razorpay` |
 
 ---
@@ -805,7 +810,7 @@ carekar/
 - [ ] Razorpay test-mode: success, failure, subscription charge, cancellation webhooks
 - [ ] Webhook signature rejection for tampered payloads
 - [ ] Price change in admin reflects on site & new payment links
-- [ ] `/admin` and `/api/admin/*` refuse access without the team password / token in production
+- [ ] Dashboard: a Gmail not on the Team page is refused; a viewer can't change status, add notes, export or open Settings/Team; removing someone logs them out on their next click
 - [ ] Admin pages `noindex` and inaccessible when logged out
 
 ### Funnel tracking

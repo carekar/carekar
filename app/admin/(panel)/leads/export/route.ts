@@ -1,7 +1,10 @@
 import { readDB, statusLabel } from "@/lib/store";
 import { filterLeads } from "@/lib/leads";
+import { can, getAdmin } from "@/lib/admin";
 
+// CSV of customer details: editors and the super admin only.
 export async function GET(req: Request) {
+  if (!can(await getAdmin(), "editor")) return new Response("Editor access needed to export leads", { status: 403 });
   const sp = Object.fromEntries(new URL(req.url).searchParams);
   const db = await readDB();
   const rows = filterLeads(db.leads, sp);

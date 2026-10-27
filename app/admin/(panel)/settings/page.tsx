@@ -11,7 +11,7 @@ import { clearDemo, restoreDemo, saveSettings } from "../../actions";
 export const metadata = { title: "Settings" };
 
 export default async function Settings({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
-  await requireAdmin("owner");
+  await requireAdmin("editor");
   const { saved } = await searchParams;
   const [db, config, health] = await Promise.all([
     readDB(),

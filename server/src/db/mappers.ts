@@ -8,7 +8,7 @@ type Row = Record<string, unknown>;
 const json = (v: unknown) => v as Prisma.InputJsonValue;
 
 /** Dates → ISO strings, nulls dropped. startDate is a calendar date, so it becomes YYYY-MM-DD. */
-function fromRow<T>(row: Row): T {
+export function fromRow<T>(row: Row): T {
   const out: Row = {};
   for (const [k, v] of Object.entries(row)) {
     if (v === null) continue;

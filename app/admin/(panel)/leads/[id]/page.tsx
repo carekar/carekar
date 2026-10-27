@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getAdmin } from "@/lib/admin";
+import { can, getAdmin } from "@/lib/admin";
 import { readDB, leadStatuses, statusLabel, type Lead, type LeadStatus } from "@/lib/store";
 import { journey } from "@/lib/analytics";
 import { Card, StatusPill, inr, istDateTime, timeAgo } from "@/components/admin/ui";
@@ -62,7 +62,7 @@ function templates(l: Lead) {
 export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const db = await readDB();
-  const owner = (await getAdmin())?.role === "owner";
+  const canEdit = can(await getAdmin(), "editor");
   const lead = db.leads.find((l) => l.id === id);
   if (!lead) notFound();
   const plan = planByVehicle(lead.vehicle);
@@ -106,7 +106,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
           <a href={`tel:+91${lead.mobile}`} className="btn-outline !min-h-12 text-sm"><Icon name="phone" className="size-4" /> Call</a>
           <a href={`https://wa.me/91${wa}`} target="_blank" rel="noopener" className="btn-wa !min-h-12 text-sm"><Icon name="whatsapp" className="size-4" /> WhatsApp</a>
         </div>
-        {step && (
+        {step && canEdit && (
           <form action={updateStatus} className="mt-2">
             <input type="hidden" name="id" value={lead.id} />
             <input type="hidden" name="status" value={step.to} />
@@ -161,6 +161,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             <p className="mt-3 text-xs text-ink-400">Razorpay payment links are generated here automatically in Phase 3.</p>
           </Card>
 
+          {canEdit ? (
           <Card title="Change status">
             <form action={updateStatus} className="space-y-2">
               <input type="hidden" name="id" value={lead.id} />
@@ -171,6 +172,9 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
               <button className="btn-outline w-full text-sm">Update status</button>
             </form>
           </Card>
+          ) : (
+            <p className="rounded-2xl bg-cream-100 px-4 py-3 text-sm text-ink-600">View-only access. Ask the admin for editor access to change status or add notes.</p>
+          )}
         </div>
 
         <div className="min-w-0 space-y-4">
@@ -192,7 +196,7 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
             </dl>
           </Card>
 
-          {owner && payments.length > 0 && (
+          {payments.length > 0 && (
             <Card title="Payments">
               <ul className="space-y-2 text-sm">
                 {payments.map((p) => (
@@ -208,11 +212,13 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
           )}
 
           <Card title="Activity">
-            <form action={addNote} className="mb-4 flex gap-2">
-              <input type="hidden" name="id" value={lead.id} />
-              <input name="text" placeholder="Add a note…" className="field" />
-              <button className="btn-primary !px-4 text-sm" aria-label="Add note"><Icon name="plus" /></button>
-            </form>
+            {canEdit && (
+              <form action={addNote} className="mb-4 flex gap-2">
+                <input type="hidden" name="id" value={lead.id} />
+                <input name="text" placeholder="Add a note…" className="field" />
+                <button className="btn-primary !px-4 text-sm" aria-label="Add note"><Icon name="plus" /></button>
+              </form>
+            )}
             <ol className="space-y-3">
               {timeline.map((t, i) => (
                 <li key={i} className="flex gap-3 text-sm">

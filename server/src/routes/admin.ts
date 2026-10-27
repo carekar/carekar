@@ -1,39 +1,47 @@
 import { Router } from "express";
 import { plans } from "../../../lib/site";
 import { leadStatuses, type LeadStatus, type Settings } from "../../../lib/types";
-import { ownerOnly, requireAdmin } from "../auth";
+import { requireAdmin, requireRole, startSession, superAdmins } from "../auth";
 import { buildDemoData } from "../demo";
 import { repo } from "../repo";
 
-// Team endpoints for the website's /admin pages. Every route needs a logged-in team member;
-// payments, settings and demo data are owner-only.
+// Team endpoints for the website's /admin pages. Viewers can read everything; changes need
+// editor access; managing the team needs the super admin.
 
 export const adminRoutes = Router();
+
+/** Google login for the dashboard: Firebase ID token in, 30-day session token out. */
+adminRoutes.post("/session", async (req, res) => {
+  const result = await startSession(String(req.body?.idToken || ""));
+  if (!("token" in result)) return void res.status(result.status ?? 401).json({ error: result.error });
+  res.json(result);
+});
+
 adminRoutes.use(requireAdmin);
+const editor = requireRole("editor");
+const superAdmin = requireRole("super_admin");
 
 adminRoutes.get("/me", (req, res) => {
   res.json(req.admin);
 });
 
-/** Everything the dashboard needs. Staff don't get payments (revenue is owner-only). */
-adminRoutes.get("/data", async (req, res) => {
-  const db = await repo().load();
-  if (req.admin!.role !== "owner") db.payments = [];
-  res.json(db);
+/** Everything the dashboard needs. */
+adminRoutes.get("/data", async (_req, res) => {
+  res.json(await repo().load());
 });
 
-adminRoutes.post("/leads/:id/status", async (req, res) => {
+adminRoutes.post("/leads/:id/status", editor, async (req, res) => {
   const to = String(req.body?.status) as LeadStatus;
   const note = String(req.body?.note || "").slice(0, 80) || undefined;
   if (!leadStatuses.includes(to)) return void res.status(422).json({ error: "Unknown status" });
-  await repo().setStatus(req.params.id, to, note);
+  await repo().setStatus(String(req.params.id), to, note);
   res.status(204).end();
 });
 
-adminRoutes.post("/leads/:id/notes", async (req, res) => {
+adminRoutes.post("/leads/:id/notes", editor, async (req, res) => {
   const text = String(req.body?.text || "").trim().slice(0, 500);
   if (!text) return void res.status(422).json({ error: "Note is empty" });
-  await repo().addNote(req.params.id, text);
+  await repo().addNote(String(req.params.id), text);
   res.status(204).end();
 });
 
@@ -42,7 +50,7 @@ const digits10 = (v: unknown) => {
   return /^[6-9]\d{9}$/.test(s) ? s : undefined;
 };
 
-adminRoutes.put("/settings", ownerOnly, async (req, res) => {
+adminRoutes.put("/settings", editor, async (req, res) => {
   const b = (req.body || {}) as {
     phone?: string;
     whatsapp?: string;
@@ -76,12 +84,35 @@ adminRoutes.put("/settings", ownerOnly, async (req, res) => {
   res.status(204).end();
 });
 
-adminRoutes.post("/demo/clear", ownerOnly, async (_req, res) => {
+adminRoutes.post("/demo/clear", editor, async (_req, res) => {
   await repo().clearDemo();
   res.status(204).end();
 });
 
-adminRoutes.post("/demo/restore", ownerOnly, async (_req, res) => {
+adminRoutes.post("/demo/restore", editor, async (_req, res) => {
   await repo().loadDemo(buildDemoData());
+  res.status(204).end();
+});
+
+// ── Team (super admin only) ───────────────────────────────────
+
+const GOOGLE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+adminRoutes.get("/team", superAdmin, async (_req, res) => {
+  res.json({ superAdmins: superAdmins(), members: await repo().listTeam() });
+});
+
+adminRoutes.put("/team", superAdmin, async (req, res) => {
+  const email = String(req.body?.email || "").trim().toLowerCase().slice(0, 120);
+  const role = req.body?.role;
+  if (!GOOGLE_EMAIL.test(email)) return void res.status(422).json({ error: "Enter a valid Google (Gmail) address" });
+  if (role !== "viewer" && role !== "editor") return void res.status(422).json({ error: "Choose viewer or editor" });
+  if (superAdmins().includes(email)) return void res.status(422).json({ error: "That account is already the super admin" });
+  await repo().saveTeamMember({ email, role, addedBy: req.admin!.email });
+  res.status(204).end();
+});
+
+adminRoutes.delete("/team/:email", superAdmin, async (req, res) => {
+  await repo().removeTeamMember(String(req.params.email).toLowerCase());
   res.status(204).end();
 });

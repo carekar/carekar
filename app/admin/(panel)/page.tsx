@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { readDB } from "@/lib/store";
-import { getAdmin } from "@/lib/admin";
 import { businessFunnel, dailySeries, makeRange, needsAction, overviewKpis, pct, previousRange, subscriptionStats } from "@/lib/analytics";
 import { Card, Columns, FunnelBars, Kpi, PageHeader, RangeTabs, StatusPill, inr, timeAgo } from "@/components/admin/ui";
 import { Icon } from "@/components/Icon";
@@ -13,7 +12,6 @@ const delta = (a: number, b: number) => (b ? Math.round(((a - b) / b) * 100) : n
 export default async function Overview({ searchParams }: { searchParams: Promise<{ d?: string }> }) {
   const days = Number((await searchParams).d) || 30;
   const db = await readDB();
-  const owner = (await getAdmin())?.role === "owner";
   const r = makeRange(days);
   const k = overviewKpis(db, r);
   const kp = overviewKpis(db, previousRange(r));
@@ -27,7 +25,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
     { n: todo.fresh.length + todo.stale.length, label: "New leads to contact", sub: todo.stale.length ? `${todo.stale.length} waiting over 2 hours` : "All within 2 hours", href: "/admin/leads?status=new", urgent: todo.stale.length > 0 },
     { n: todo.awaitingCheck.length, label: "Availability to confirm", sub: "Contacted, not yet confirmed", href: "/admin/leads?status=contacted" },
     { n: todo.awaitingPayment.length, label: "Awaiting payment", sub: "Payment link sent", href: "/admin/leads?status=payment_link_sent" },
-    { n: todo.failed.length, label: "Failed payments (7 days)", sub: "Follow up on WhatsApp", href: owner ? "/admin/payments" : "/admin/leads?status=payment_link_sent", urgent: todo.failed.length > 0 },
+    { n: todo.failed.length, label: "Failed payments (7 days)", sub: "Follow up on WhatsApp", href: "/admin/payments", urgent: todo.failed.length > 0 },
   ];
 
   const recent = [...db.leads].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
@@ -48,7 +46,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         <Kpi label="Visitors" value={k.visitors.toLocaleString("en-IN")} delta={delta(k.visitors, kp.visitors)} sub="vs prev." icon="users" />
         <Kpi label="Leads" value={String(k.leads)} delta={delta(k.leads, kp.leads)} sub={`${pct(k.leads, k.visitors)}% of visitors`} icon="list" />
         <Kpi label="Paid customers" value={String(k.paid)} delta={delta(k.paid, kp.paid)} sub={`${pct(k.paid, k.leads)}% of leads`} icon="checkCircle" />
-        {owner && <Kpi label="Collected" value={inr(k.revenue)} delta={delta(k.revenue, kp.revenue)} sub="vs prev." icon="wallet" />}
+        <Kpi label="Collected" value={inr(k.revenue)} delta={delta(k.revenue, kp.revenue)} sub="vs prev." icon="wallet" />
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3">
@@ -56,12 +54,10 @@ export default async function Overview({ searchParams }: { searchParams: Promise
           <p className="text-xs font-semibold text-white/70">Active subscriptions</p>
           <p className="font-display tabular mt-1.5 text-[26px] font-extrabold leading-none">{subs.active}</p>
         </div>
-        {owner && (
-          <div className="rounded-2xl bg-forest-900 p-4 text-white">
-            <p className="text-xs font-semibold text-white/70">Monthly recurring revenue</p>
-            <p className="font-display tabular mt-1.5 text-[26px] font-extrabold leading-none text-sun-400">{inr(subs.mrr)}</p>
-          </div>
-        )}
+        <div className="rounded-2xl bg-forest-900 p-4 text-white">
+          <p className="text-xs font-semibold text-white/70">Monthly recurring revenue</p>
+          <p className="font-display tabular mt-1.5 text-[26px] font-extrabold leading-none text-sun-400">{inr(subs.mrr)}</p>
+        </div>
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_1fr]">

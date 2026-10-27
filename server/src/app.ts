@@ -25,7 +25,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     database: hasDatabase() ? "postgres" : "file",
-    admin: adminConfigured() ? "password" : "disabled (set ADMIN_TOKEN)",
+    admin: adminConfigured() ? "google" : "disabled (set ADMIN_SESSION_SECRET)",
     alerts: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
   });
 });
