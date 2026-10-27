@@ -2,39 +2,18 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createServerClient } from "@supabase/ssr";
 import { ADMIN_COOKIE } from "./auth";
-import { hasSupabaseAuth, supabaseAnonKey, supabaseUrl } from "./env";
 import { api, ApiError } from "./api";
 
 export type Role = "owner" | "staff";
 export type Admin = { id: string; email: string; name?: string; role: Role };
 
-/** Supabase client bound to the visitor's auth cookies (admin login sessions). */
-export async function authClient() {
-  const jar = await cookies();
-  return createServerClient(supabaseUrl(), supabaseAnonKey(), {
-    cookies: {
-      getAll: () => jar.getAll(),
-      setAll: (list) => {
-        try {
-          for (const c of list) jar.set(c.name, c.value, c.options);
-        } catch {
-          // called from a server component: middleware refreshes the session instead
-        }
-      },
-    },
-  });
-}
-
-/** The token sent to the API as "Authorization: Bearer …": the Supabase access token, or the preview cookie. */
+/** The token sent to the API as "Authorization: Bearer …" (set in the login cookie). */
 export async function adminBearer(): Promise<string | undefined> {
-  if (!hasSupabaseAuth()) return (await cookies()).get(ADMIN_COOKIE)?.value;
-  const { data } = await (await authClient()).auth.getSession();
-  return data.session?.access_token;
+  return (await cookies()).get(ADMIN_COOKIE)?.value;
 }
 
-/** Asks the API who this token belongs to. null = not a team member. */
+/** Asks the API whether this token is valid. null = not logged in. */
 export async function adminForToken(token: string | undefined) {
   if (!token) return null;
   try {
@@ -45,7 +24,7 @@ export async function adminForToken(token: string | undefined) {
   }
 }
 
-/** The logged-in team member, or null. Owners see revenue, payments and settings; staff don't. */
+/** The logged-in team member, or null. */
 export const getAdmin = cache(async () => adminForToken(await adminBearer()));
 
 export async function requireAdmin(role?: Role) {

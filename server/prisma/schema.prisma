@@ -43,10 +43,6 @@ enum PaymentStatus {
   failed
 }
 
-enum AdminRole {
-  owner
-  staff
-}
 
 /// A booking request from the website. ref is CK-1001, CK-1002… from lead_ref_seq.
 model Lead {
@@ -168,13 +164,3 @@ model Setting {
   @@map("settings")
 }
 
-/// Who may log in to /admin. userId is the Supabase Auth user id.
-model AdminUser {
-  userId    String    @id @map("user_id") @db.Uuid
-  email     String
-  name      String?
-  role      AdminRole @default(staff)
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  @@map("admin_users")
-}

@@ -2,7 +2,7 @@ import express, { type ErrorRequestHandler } from "express";
 import { adminRoutes } from "./routes/admin";
 import { publicRoutes } from "./routes/public";
 import { customerRoutes } from "./routes/customer";
-import { hasSupabaseAuth } from "./auth";
+import { adminConfigured } from "./auth";
 import { hasDatabase } from "./repo";
 
 // Carekar API. The website forwards /api/* here (next.config.ts rewrites), so the
@@ -25,7 +25,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     database: hasDatabase() ? "postgres" : "file",
-    auth: hasSupabaseAuth() ? "supabase" : "preview",
+    admin: adminConfigured() ? "password" : "disabled (set ADMIN_TOKEN)",
     alerts: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
   });
 });

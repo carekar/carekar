@@ -80,7 +80,7 @@
 | Backend API | **Node.js 22+ / Express 5 + TypeScript** (`server/`) | Separate backend that owns all business logic: bookings, tracking, admin actions, alerts, and later Razorpay |
 | ORM | **Prisma 7** (`@prisma/adapter-pg`) | Typed queries, schema in one file, versioned migrations, Prisma Studio for browsing data |
 | Database | **Supabase Postgres** (free tier, Mumbai region) | Leads, payments, events, settings, admin roles |
-| Admin auth | **Supabase Auth** (email + password) | Free and secure. The API verifies each login token and checks the role in `admin_users` |
+| Admin auth | **One shared team password** | `ADMIN_PASSWORD` on the website; the login cookie carries `ADMIN_TOKEN`, which the API checks on every admin request. No defaults in production. Per-person logins / staff role can be added later if the team grows |
 | Customer login | **Firebase Auth: Google sign-in** | Free, one tap, no password. Required to confirm a booking. The API verifies the ID token with Google's public keys |
 | Payments | **Razorpay** (Subscriptions + Payment Links + Webhooks) | Indian UPI/cards/netbanking, auto-debit support |
 | Hosting (website) | **Netlify free plan** (fallback: Cloudflare Pages) | Commercial use allowed on free tier, HTTPS, CDN |
@@ -101,13 +101,13 @@ Customer's phone ──► Next.js website (Netlify)
                   Express API (Render)  ──Prisma──►  Supabase Postgres
                        │                            (RLS on, no policies: the public
                        ├─► Telegram (new-lead alerts)   anon key can read nothing)
-                       └─► Supabase Auth (verify admin tokens)
+                       └─► Google public keys (verify customer logins)
 ```
 
-- **Website** has no database access and no secret keys. It only knows `API_URL` and the public Supabase Auth keys for the login screen.
-- **API** is the only thing that talks to the database. Every admin endpoint checks the login token and role on every request; staff never receive payment data.
+- **Website** has no database access. It knows `API_URL`, the team password and the admin token (shared with the API).
+- **API** is the only thing that talks to the database. Every admin endpoint checks the admin token on every request.
 - Shared code (plans, prices, form validation, data types in `lib/`) is used by both, so the site and API can't disagree on prices or form rules.
-- **Laptop preview:** without `DATABASE_URL` the API stores data in `server/data/db.json`; without Supabase Auth keys the admin uses a preview password.
+- **Laptop preview:** without `DATABASE_URL` the API stores data in `server/data/db.json`; without `ADMIN_PASSWORD` the local admin uses the preview password `carekar-admin` (never in production).
 - If the API is unreachable, public pages still render with default prices/contact, and the booking form shows a WhatsApp/call fallback.
 
 ### Monthly cost at launch
@@ -629,7 +629,6 @@ The schema lives in `server/prisma/schema.prisma`, and migrations in `server/pri
 | `Event` → `events` | Funnel events (page views, plan clicks, form steps, submit, status changes) | `props` JSON; indexed by time, visitor and lead |
 | `Payment` → `payments` | Payments per lead | `razorpay_payment_id` unique (idempotent webhooks), `razorpay_subscription_id`; cascades when a lead is deleted |
 | `Setting` → `settings` | Admin-editable site settings | key `site`: contact numbers/email, prices, hidden plans, society list |
-| `AdminUser` → `admin_users` | Who can log in to /admin | `user_id` = Supabase Auth user id; role enum `owner` / `staff` |
 
 Demo rows (`demo = true`) let the dashboard be previewed and can be cleared from Settings without touching real bookings.
 
@@ -647,8 +646,8 @@ Demo rows (`demo = true`) let the dashboard be previewed and can be cleared from
 **Security:**
 - Only the Express API connects to the database (Prisma, as the database owner). The website holds no database credentials.
 - Row Level Security is enabled on every table with **no policies**, so Supabase's public anon key and REST API can read or write nothing.
-- Admin endpoints verify the Supabase login token and the role in `admin_users` on every request. Staff never receive payment data, and settings, payments and demo data are owner-only.
-- The Supabase service-role key is used only by the one-off `admin:create` script on a laptop, never on a server.
+- Admin endpoints compare the bearer token with `ADMIN_TOKEN` (constant-time) on every request. In production a missing or short token (< 24 characters) closes the admin API, and a missing password disables the login.
+- No Supabase API keys are used at all; the database is reached only through Prisma with `DATABASE_URL`. (The `admin_users` table was removed in migration 0004.)
 
 ---
 
@@ -708,7 +707,7 @@ carekar/
 │  │  ├─ book/thank-you/page.tsx
 │  │  ├─ privacy-policy/ terms/ refund-cancellation/ contact/ credits/
 │  ├─ admin/
-│  │  ├─ login/                    # Supabase Auth sign-in
+│  │  ├─ login/                    # shared team password
 │  │  ├─ (panel)/ overview, leads, leads/[id], leads/export, payments, funnel, settings
 │  │  └─ actions.ts                # form actions → API calls
 │  ├─ sitemap.ts  robots.ts  layout.tsx
@@ -760,15 +759,15 @@ carekar/
 ### Running locally
 - `npm run dev:api` (or `npm run dev` inside `server/`): API on port 4000.
 - `npm run dev`: website on port 3000.
-- In `server/`: `npm run db:migrate`, `npm run db:import`, `npm run admin:create -- email password owner "Name"`, and `npm run db:studio` to browse data.
+- In `server/`: `npm run db:migrate`, `npm run db:import`, and `npm run db:studio` to browse data.
 
 ### Deployment
 | Part | Where | Settings |
 |---|---|---|
 | Database | Supabase (Mumbai) | Run `npm run db:migrate` from `server/` once per schema change |
-| API | Render web service, Singapore | Root directory `server`. Build: `npm ci && npm run build`. Start: `npm start`. Health check: `/health`. Env vars from `server/.env.example` (no service-role key). Node 22+ |
+| API | Render web service, Singapore | Root directory `server`. Build: `npm ci && npm run build`. Start: `npm start`. Health check: `/health`. Env vars: `NODE_VERSION=24`, `DATABASE_URL`, `DIRECT_URL`, `ADMIN_TOKEN`, `FIREBASE_PROJECT_ID`, `SITE_URL`, optional Telegram |
 | Keep-alive | cron-job.org (free) | GET `https://<api>/health` every 10 minutes so the free instance doesn't sleep |
-| Website | Netlify | Build `npm run build`. Env: `API_URL` = Render URL, Supabase URL + anon key, `SITE_URL`. Node 22+ |
+| Website | Netlify | Build `npm run build`. Env: `NODE_VERSION=24`, `API_URL` = Render URL, `ADMIN_PASSWORD`, `ADMIN_TOKEN` (same as Render), `SITE_URL` |
 | Razorpay webhook (Phase 3) | Points at the API URL directly | `https://<api>/api/webhooks/razorpay` |
 
 ---
@@ -806,7 +805,7 @@ carekar/
 - [ ] Razorpay test-mode: success, failure, subscription charge, cancellation webhooks
 - [ ] Webhook signature rejection for tampered payloads
 - [ ] Price change in admin reflects on site & new payment links
-- [ ] Staff role cannot see payments
+- [ ] `/admin` and `/api/admin/*` refuse access without the team password / token in production
 - [ ] Admin pages `noindex` and inaccessible when logged out
 
 ### Funnel tracking

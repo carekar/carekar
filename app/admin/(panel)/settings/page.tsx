@@ -1,7 +1,6 @@
 import { readDB } from "@/lib/store";
 import { requireAdmin } from "@/lib/admin";
 import { getConfig } from "@/lib/settings";
-import { hasSupabaseAuth } from "@/lib/env";
 import { api } from "@/lib/api";
 import { Card, PageHeader } from "@/components/admin/ui";
 import { LinkBuilder } from "@/components/admin/LinkBuilder";
@@ -108,7 +107,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             {health?.database === "postgres" ? "Supabase Postgres via Prisma (live)" : "Local file (preview only, add DATABASE_URL to server/.env)"}
           </dd>
           <dt className="text-ink-400">Logins</dt>
-          <dd className="font-medium">{hasSupabaseAuth() ? "Email + password (Supabase Auth)" : "Preview password"}</dd>
+          <dd className="font-medium">Shared team password</dd>
           <dt className="text-ink-400">Lead alerts</dt>
           <dd className="font-medium">{health?.alerts ? "Telegram on" : "Off (add Telegram bot keys to server/.env)"}</dd>
         </dl>

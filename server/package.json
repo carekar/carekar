@@ -15,13 +15,11 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:import": "tsx --env-file-if-exists=.env scripts/db-import.ts",
-    "admin:create": "tsx --env-file-if-exists=.env scripts/create-admin.ts"
+    "db:import": "tsx --env-file-if-exists=.env scripts/db-import.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
-    "@supabase/supabase-js": "^2.118.0",
     "express": "^5.3.0",
     "jose": "^6.2.13",
     "zod": "^3.25.76"

@@ -4,16 +4,14 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { ADMIN_COOKIE, STAFF_COOKIE } from "@/lib/auth";
-import { authClient, requireAdmin } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin";
 import { api } from "@/lib/api";
-import { hasSupabaseAuth } from "@/lib/env";
 import { CONFIG_TAG } from "@/lib/settings";
 import { plans } from "@/lib/site";
 
 // Admin form actions. The API re-checks the login and role on every call.
 
 export async function logout() {
-  if (hasSupabaseAuth()) await (await authClient()).auth.signOut();
   const jar = await cookies();
   jar.delete(ADMIN_COOKIE);
   jar.delete(STAFF_COOKIE);

@@ -1,12 +1,9 @@
+import { timingSafeEqual } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { prisma } from "./db/client";
-import { hasDatabase } from "./repo";
 
-// Admin auth for /api/admin/*. The website logs the team member in with Supabase Auth and
-// sends their access token as "Authorization: Bearer <token>". We check the token with
-// Supabase and the role in the admin_users table. Without Supabase keys (laptop preview)
-// the bearer must equal ADMIN_TOKEN instead.
+// Admin auth for /api/admin/*. The team logs in on the website with one shared password; the
+// website then sends ADMIN_TOKEN as "Authorization: Bearer <token>". It must match the
+// ADMIN_TOKEN set here. In production a missing or short token disables admin access.
 
 export type Role = "owner" | "staff";
 export type Admin = { id: string; email: string; name?: string; role: Role };
@@ -17,34 +14,33 @@ declare module "express-serve-static-core" {
   }
 }
 
-const supabaseUrl = () => process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = () =>
-  process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const previewToken = () => process.env.ADMIN_TOKEN || "dev-preview-token";
+const MIN_TOKEN = 24;
 
-export const hasSupabaseAuth = () => hasDatabase() && !!supabaseUrl() && !!supabaseAnonKey();
-
-let sb: SupabaseClient | undefined;
-const supabase = () => (sb ??= createClient(supabaseUrl(), supabaseAnonKey(), { auth: { persistSession: false, autoRefreshToken: false } }));
-
-async function adminFromToken(token: string): Promise<Admin | null> {
-  if (!hasSupabaseAuth()) return token === previewToken() ? { id: "preview", email: "preview", name: "Preview", role: "owner" } : null;
-  const { data } = await supabase().auth.getUser(token);
-  if (!data.user) return null;
-  const row = await prisma().adminUser.findUnique({ where: { userId: data.user.id } });
-  return row ? { id: row.userId, email: row.email, name: row.name ?? undefined, role: row.role } : null;
+function adminToken() {
+  const t = process.env.ADMIN_TOKEN || "";
+  if (process.env.NODE_ENV === "production") return t.length >= MIN_TOKEN ? t : "";
+  return t || "dev-preview-token";
 }
 
-/** Rejects the request unless it comes from a logged-in team member. */
-export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const token = req.get("authorization")?.replace(/^Bearer\s+/i, "");
-  const admin = token ? await adminFromToken(token) : null;
-  if (!admin) return void res.status(401).json({ error: "Not logged in" });
-  req.admin = admin;
+/** Whether admin login can work (ADMIN_TOKEN set, or local development). */
+export const adminConfigured = () => !!adminToken();
+
+function sameSecret(a: string, b: string) {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+
+/** Rejects the request unless it carries the team's admin token. */
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const token = req.get("authorization")?.replace(/^Bearer\s+/i, "") || "";
+  const expected = adminToken();
+  if (!expected || !sameSecret(token, expected)) return void res.status(401).json({ error: "Not logged in" });
+  req.admin = { id: "team", email: "team", name: "Carekar team", role: "owner" };
   next();
 }
 
-/** Use after requireAdmin: payments, settings and demo data are for the owner only. */
+/** Use after requireAdmin. Everyone with the shared password is an owner today; kept for a future staff login. */
 export function ownerOnly(req: Request, res: Response, next: NextFunction) {
   if (req.admin?.role !== "owner") return void res.status(403).json({ error: "Owner only" });
   next();
