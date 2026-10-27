@@ -1,0 +1,10 @@
+node_modules
+.next
+data/
+.env*.local
+next-env.d.ts
+*.tsbuildinfo
+.env
+/.next-build/
+/server/src/generated/
+/server/dist/

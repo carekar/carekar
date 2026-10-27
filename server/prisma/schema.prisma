@@ -1,0 +1,173 @@
+// Carekar database schema (Supabase Postgres).
+// Change a model here, then run `npm run db:migrate:dev -- --name what_changed` to create a migration.
+// Only this API talks to the database. Every table has RLS enabled with no policies
+// (see migrations/0001_init), so Supabase's public anon key can read nothing.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Vehicle {
+  hatchback
+  sedan
+  suv
+  luxury
+  bike
+}
+
+enum LeadStatus {
+  new
+  contacted
+  availability_confirmed
+  payment_link_sent
+  active
+  not_serviceable
+  paused
+  cancelled
+  lost
+}
+
+enum PaymentStatus {
+  captured
+  failed
+}
+
+enum AdminRole {
+  owner
+  staff
+}
+
+/// A booking request from the website. ref is CK-1001, CK-1002… from lead_ref_seq.
+model Lead {
+  id                String     @id @default(dbgenerated("(gen_random_uuid())::text"))
+  ref               String     @unique @default(dbgenerated("('CK-'::text || nextval('lead_ref_seq'::regclass))"))
+  createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  vehicle           Vehicle
+  vehicleModel      String?    @map("vehicle_model")
+  vehicleCount      Int        @default(1) @map("vehicle_count")
+  name              String
+  mobile            String
+  sameWhatsapp      Boolean    @default(true) @map("same_whatsapp")
+  whatsapp          String?
+  society           String
+  towerFlat         String?    @map("tower_flat")
+  locality          String?
+  parkingType       String?    @map("parking_type")
+  parkingSlot       String?    @map("parking_slot")
+  startDate         DateTime?  @map("start_date") @db.Date
+  preferredTime     String?    @map("preferred_time")
+  vehicleColour     String?    @map("vehicle_colour")
+  registrationNo    String?    @map("registration_no")
+  heardFrom         String?    @map("heard_from")
+  notes             String?
+  callbackRequested Boolean    @default(false) @map("callback_requested")
+  planPrice         Int        @map("plan_price")
+  status            LeadStatus @default(new)
+  lostReason        String?    @map("lost_reason")
+  /// [{ at, from?, to, note? }] status changes, oldest first
+  history           Json       @default("[]")
+  /// [{ at, text }]
+  teamNotes         Json       @default("[]") @map("team_notes")
+  visitorId         String?    @map("visitor_id")
+  firstTouch        Json?      @map("first_touch")
+  lastTouch         Json?      @map("last_touch")
+  device            String?
+  inApp             String?    @map("in_app")
+  /// Google account (Firebase Auth uid) that confirmed the booking
+  customerUid       String?    @map("customer_uid")
+  customerEmail     String?    @map("customer_email")
+  customerName      String?    @map("customer_name")
+  demo              Boolean    @default(false)
+  payments          Payment[]
+
+  @@index([createdAt(sort: Desc)], map: "leads_created_idx")
+  @@index([mobile, vehicle, createdAt(sort: Desc)], map: "leads_dedupe_idx")
+  @@index([status], map: "leads_status_idx")
+  @@index([customerUid], map: "leads_customer_idx")
+  @@map("leads")
+}
+
+/// One website visit, with where it came from (UTM / referrer).
+model Session {
+  id        String   @id
+  visitorId String   @map("visitor_id")
+  startedAt DateTime @default(now()) @map("started_at") @db.Timestamptz(6)
+  channel   String   @default("Direct")
+  source    String?
+  medium    String?
+  campaign  String?
+  content   String?
+  landing   String?
+  referrer  String?
+  device    String   @default("mobile")
+  os        String?
+  browser   String?
+  inApp     String?  @map("in_app")
+  returning Boolean  @default(false)
+  demo      Boolean  @default(false)
+
+  @@index([startedAt(sort: Desc)], map: "sessions_started_idx")
+  @@index([visitorId], map: "sessions_visitor_idx")
+  @@map("sessions")
+}
+
+/// Funnel tracking events (page views, plan clicks, form steps…).
+model Event {
+  id        BigInt   @id @default(autoincrement())
+  at        DateTime @default(now()) @db.Timestamptz(6)
+  visitorId String   @map("visitor_id")
+  sessionId String   @map("session_id")
+  name      String
+  props     Json?
+  path      String?
+  leadId    String?  @map("lead_id")
+  demo      Boolean  @default(false)
+
+  @@index([at(sort: Desc)], map: "events_at_idx")
+  @@index([visitorId], map: "events_visitor_idx")
+  @@index([leadId], map: "events_lead_idx")
+  @@map("events")
+}
+
+model Payment {
+  id                     String        @id @default(dbgenerated("(gen_random_uuid())::text"))
+  leadId                 String        @map("lead_id")
+  lead                   Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  amount                 Int
+  method                 String
+  status                 PaymentStatus
+  at                     DateTime      @default(now()) @db.Timestamptz(6)
+  razorpayPaymentId      String?       @unique @map("razorpay_payment_id")
+  razorpaySubscriptionId String?       @map("razorpay_subscription_id")
+  demo                   Boolean       @default(false)
+
+  @@index([leadId], map: "payments_lead_idx")
+  @@index([at(sort: Desc)], map: "payments_at_idx")
+  @@map("payments")
+}
+
+/// Admin-editable site settings (contact, prices, societies…), one JSON document per key.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("settings")
+}
+
+/// Who may log in to /admin. userId is the Supabase Auth user id.
+model AdminUser {
+  userId    String    @id @map("user_id") @db.Uuid
+  email     String
+  name      String?
+  role      AdminRole @default(staff)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("admin_users")
+}

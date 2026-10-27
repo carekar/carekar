@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand palette (plan.md §4.1) */
+  --color-forest-900: #0a3d24;
+  --color-forest-800: #0d4a2c;
+  --color-forest-700: #0f5c36;
+  --color-leaf-400: #7cc47f;
+  --color-leaf-200: #c4e5c3;
+  --color-leaf-100: #e3f2e1;
+  --color-cream-50: #fbf7ec;
+  --color-cream-100: #f7f0de;
+  --color-cream-200: #f2ead6;
+  --color-sun-400: #f6c343;
+  --color-sun-500: #e5ae1f;
+  --color-ink-900: #14251b;
+  --color-ink-600: #4b5d52;
+  --color-ink-400: #7d8c83;
+  --color-danger: #c2410c;
+
+  --font-display: var(--font-bricolage), system-ui, sans-serif;
+  --font-sans: var(--font-jakarta), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --radius-card: 1.25rem;
+  --shadow-card: 0 1px 2px rgb(10 61 36 / 0.06), 0 8px 24px -12px rgb(10 61 36 / 0.18);
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+  body {
+    background: var(--color-cream-50);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+  input, select, textarea {
+    font-size: 16px; /* prevents iOS zoom on focus */
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-sun-400);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+}
+
+/* Component classes as @utility so they compose with @apply and variants (Tailwind v4) */
+@utility btn {
+  @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-6 text-base font-semibold transition active:scale-[0.98];
+}
+@utility btn-primary {
+  @apply btn bg-forest-700 text-white shadow-[0_6px_16px_-6px_rgb(15_92_54/0.6)] hover:bg-forest-800;
+}
+@utility btn-sun {
+  @apply btn bg-sun-400 text-forest-900 hover:bg-sun-500;
+}
+@utility btn-outline {
+  @apply btn border-2 border-forest-700/20 bg-white text-forest-800 hover:border-forest-700/40;
+}
+@utility btn-wa {
+  @apply btn bg-[#1faa53] text-white hover:bg-[#178f45];
+}
+@utility card {
+  @apply rounded-[var(--radius-card)] bg-white shadow-[var(--shadow-card)];
+}
+@utility eyebrow {
+  @apply text-xs font-bold uppercase tracking-[0.14em] text-forest-700;
+}
+@utility field-label {
+  @apply mb-1.5 block text-sm font-semibold text-ink-900;
+}
+@utility field {
+  @apply block min-h-12 w-full rounded-xl border border-cream-200 bg-cream-50 px-4 py-3 text-ink-900 placeholder:text-ink-400 focus:border-forest-700 focus:bg-white focus:outline-none;
+}
+@utility chip {
+  @apply inline-flex min-h-11 items-center justify-center rounded-full border border-cream-200 bg-white px-4 text-sm font-semibold text-ink-900 transition;
+  &[data-active="true"] {
+    @apply border-forest-700 bg-leaf-100 text-forest-900;
+  }
+}
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.pb-safe { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+.animate-rise { animation: rise 0.5s ease-out both; }
+
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
