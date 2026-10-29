@@ -44,6 +44,19 @@ export async function updateStatus(formData: FormData) {
   revalidatePath("/admin", "layout");
 }
 
+export async function createPaymentLink(formData: FormData) {
+  await requireAdmin("editor");
+  const id = String(formData.get("id"));
+  let error = "";
+  try {
+    await api(`/api/admin/leads/${encodeURIComponent(id)}/payment-link`, { method: "POST" });
+  } catch (e) {
+    error = e instanceof ApiError ? e.message : "Something went wrong";
+  }
+  revalidatePath("/admin", "layout");
+  redirect(`/admin/leads/${id}` + (error ? "?error=" + encodeURIComponent(error) : ""));
+}
+
 export async function addNote(formData: FormData) {
   await requireAdmin("editor");
   const id = String(formData.get("id"));

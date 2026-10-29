@@ -3,6 +3,7 @@ import { plans } from "../../../lib/site";
 import { leadStatuses, type LeadStatus, type Settings } from "../../../lib/types";
 import { requireAdmin, requireRole, startSession, superAdmins } from "../auth";
 import { buildDemoData } from "../demo";
+import { createPaymentLink, razorpayConfigured } from "../razorpay";
 import { repo } from "../repo";
 
 // Team endpoints for the website's /admin pages. Viewers can read everything; changes need
@@ -36,6 +37,18 @@ adminRoutes.post("/leads/:id/status", editor, async (req, res) => {
   if (!leadStatuses.includes(to)) return void res.status(422).json({ error: "Unknown status" });
   await repo().setStatus(String(req.params.id), to, note);
   res.status(204).end();
+});
+
+/** Creates a Razorpay payment link for the amount due and moves the lead to "payment link sent". */
+adminRoutes.post("/leads/:id/payment-link", editor, async (req, res) => {
+  if (!razorpayConfigured()) {
+    return void res.status(503).json({ error: "Razorpay isn't connected yet. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET on the API server (Render)." });
+  }
+  const lead = await repo().getLead(String(req.params.id));
+  if (!lead) return void res.status(404).json({ error: "Lead not found" });
+  const link = await createPaymentLink(lead);
+  await repo().savePaymentLink(lead.id, link);
+  res.json(link);
 });
 
 adminRoutes.post("/leads/:id/notes", editor, async (req, res) => {

@@ -8,7 +8,12 @@ export interface Repo {
   load(): Promise<DB>;
   addEvents(events: TrackEvent[], session?: Session): Promise<void>;
   submitLead(fields: LeadFields, planPrice: number, meta: LeadMeta): Promise<{ id: string; ref: string; duplicate: boolean }>;
+  getLead(id: string): Promise<Lead | null>;
   setStatus(id: string, to: LeadStatus, note?: string): Promise<void>;
+  /** Keeps the latest payment link on the lead and moves it to "payment link sent" (active leads stay active). */
+  savePaymentLink(id: string, link: { id: string; url: string }): Promise<void>;
+  /** Records a Razorpay payment once (false if already recorded), clears the paid link and makes the lead active. */
+  recordPayment(p: Omit<Payment, "id">): Promise<boolean>;
   addNote(id: string, text: string): Promise<void>;
   clearDemo(): Promise<void>;
   loadDemo(demo: DB): Promise<void>;

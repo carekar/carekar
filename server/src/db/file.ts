@@ -106,6 +106,32 @@ export const fileRepo: Repo = {
       if (lead.visitorId) db.events.push({ at: now, visitorId: lead.visitorId, sessionId: "server", name: "lead_status_changed", props: { to }, leadId: id });
     }),
 
+  getLead: async (id) => (await read()).leads.find((l) => l.id === id) ?? null,
+
+  savePaymentLink: async (id, link) => {
+    const lead = await mutate((db) => {
+      const l = db.leads.find((x) => x.id === id);
+      if (l) Object.assign(l, { paymentLinkId: link.id, paymentLinkUrl: link.url });
+      return l;
+    });
+    if (lead && lead.status !== "active") await fileRepo.setStatus(id, "payment_link_sent");
+  },
+
+  recordPayment: async (p) => {
+    const recorded = await mutate((db) => {
+      if (p.razorpayPaymentId && db.payments.some((x) => x.razorpayPaymentId === p.razorpayPaymentId)) return false;
+      db.payments.push({ ...p, id: crypto.randomUUID() });
+      const l = db.leads.find((x) => x.id === p.leadId);
+      if (l) {
+        delete l.paymentLinkId;
+        delete l.paymentLinkUrl;
+      }
+      return true;
+    });
+    if (recorded) await fileRepo.setStatus(p.leadId, "active", "Paid online (Razorpay)");
+    return recorded;
+  },
+
   addNote: (id, text) =>
     mutate((db) => {
       db.leads.find((l) => l.id === id)?.teamNotes.push({ at: new Date().toISOString(), text });

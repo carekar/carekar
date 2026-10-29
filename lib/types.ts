@@ -49,6 +49,9 @@ export type Lead = Omit<LeadInput, "consent"> & {
   customerUid?: string;
   customerEmail?: string;
   customerName?: string;
+  /** Latest unpaid Razorpay payment link (cleared once it's paid) */
+  paymentLinkId?: string;
+  paymentLinkUrl?: string;
   demo?: boolean;
 };
 
@@ -86,9 +89,10 @@ export type Payment = {
   id: string;
   leadId: string;
   amount: number;
-  method: "upi" | "card" | "netbanking" | "upi_autopay";
+  method: "upi" | "card" | "netbanking" | "upi_autopay" | "wallet" | "emi" | "other";
   status: "captured" | "failed";
   at: string;
+  razorpayPaymentId?: string;
   demo?: boolean;
 };
 
@@ -130,6 +134,8 @@ export type CustomerBooking = Pick<
   /** status changes, oldest first */
   timeline: { at: string; to: LeadStatus }[];
   payments: Pick<Payment, "amount" | "status" | "at" | "method">[];
+  /** The customer can pay online now (availability confirmed, or a renewal is due) */
+  payable?: boolean;
 };
 
 /** Customer-facing wording for each pipeline status. */

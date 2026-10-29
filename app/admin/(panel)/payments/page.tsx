@@ -29,9 +29,11 @@ export default async function Payments({ searchParams }: { searchParams: Promise
         <RangeTabs days={days} base="/admin/payments" />
       </PageHeader>
 
-      <p className="mb-4 rounded-xl bg-sun-400/20 p-3 text-sm text-forest-900">
-        Razorpay is connected in Phase 3. Payments below are demo data showing how this page will look.
-      </p>
+      {db.payments.some((p) => p.demo) && (
+        <p className="mb-4 rounded-xl bg-sun-400/20 p-3 text-sm text-forest-900">
+          Includes demo payments. Clear demo data in Settings once real payments start.
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Collected" value={inr(s.collected)} sub={`${s.count} payments`} icon="wallet" />

@@ -2,8 +2,10 @@ import express, { type ErrorRequestHandler } from "express";
 import { adminRoutes } from "./routes/admin";
 import { publicRoutes } from "./routes/public";
 import { customerRoutes } from "./routes/customer";
+import { webhookRoutes } from "./routes/webhooks";
 import { adminConfigured } from "./auth";
 import { hasDatabase } from "./repo";
+import { razorpayMode } from "./razorpay";
 
 // Carekar API. The website forwards /api/* here (next.config.ts rewrites), so the
 // browser only ever talks to the website's own domain and no CORS is needed.
@@ -13,6 +15,7 @@ export const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", true); // real visitor IP from X-Forwarded-For (rate limiting)
 
+app.use("/api/webhooks", webhookRoutes); // needs the raw body, so before express.json()
 app.use(express.json({ limit: "100kb" }));
 app.use(express.text({ limit: "100kb" })); // older sendBeacon fallbacks post text/plain
 app.use((_req, res, next) => {
@@ -27,6 +30,8 @@ app.get("/health", (_req, res) => {
     database: hasDatabase() ? "postgres" : "file",
     admin: adminConfigured() ? "google" : "disabled (set ADMIN_SESSION_SECRET)",
     alerts: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+    payments: razorpayMode(),
+    paymentWebhook: !!process.env.RAZORPAY_WEBHOOK_SECRET,
   });
 });
 

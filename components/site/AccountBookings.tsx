@@ -9,6 +9,7 @@ import { customerStatus, type CustomerBooking } from "@/lib/types";
 import { track } from "@/lib/track";
 import { useConfig } from "./ConfigProvider";
 import { LoginPanel } from "./LoginPanel";
+import { PayButton } from "./PayButton";
 import { useCustomer } from "./useCustomer";
 
 const DAY = 86400000;
@@ -174,6 +175,7 @@ export function AccountBookings() {
                       </div>
                     )}
                   </dl>
+                  {b.payable && <PayButton bookingRef={b.ref} amount={b.planPrice * (b.vehicleCount || 1)} token={account.token} onPaid={load} />}
                   <a href={help(b.ref)} target="_blank" rel="noopener" className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-forest-700">
                     <Icon name="whatsapp" className="size-4" /> Questions about this booking
                   </a>

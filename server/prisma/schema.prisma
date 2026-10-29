@@ -86,6 +86,9 @@ model Lead {
   customerUid       String?    @map("customer_uid")
   customerEmail     String?    @map("customer_email")
   customerName      String?    @map("customer_name")
+  /// Latest unpaid Razorpay payment link (cleared once it's paid)
+  paymentLinkId     String?    @map("payment_link_id")
+  paymentLinkUrl    String?    @map("payment_link_url")
   demo              Boolean    @default(false)
   payments          Payment[]
 

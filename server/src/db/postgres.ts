@@ -104,6 +104,24 @@ export const postgresRepo: Repo = {
     }
   },
 
+  getLead: leadById,
+
+  async savePaymentLink(id, link) {
+    await prisma().lead.update({ where: { id }, data: { paymentLinkId: link.id, paymentLinkUrl: link.url } });
+    const lead = await leadById(id);
+    if (lead && lead.status !== "active") await postgresRepo.setStatus(id, "payment_link_sent");
+  },
+
+  async recordPayment(p) {
+    const db = prisma();
+    // Razorpay retries webhooks, so the same payment can arrive more than once
+    if (p.razorpayPaymentId && (await db.payment.findUnique({ where: { razorpayPaymentId: p.razorpayPaymentId } }))) return false;
+    await db.payment.create({ data: { ...p, at: new Date(p.at) } });
+    await db.lead.update({ where: { id: p.leadId }, data: { paymentLinkId: null, paymentLinkUrl: null } });
+    await postgresRepo.setStatus(p.leadId, "active", "Paid online (Razorpay)");
+    return true;
+  },
+
   async addNote(id, text) {
     const lead = await leadById(id);
     if (!lead) return;

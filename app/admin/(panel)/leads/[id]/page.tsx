@@ -7,16 +7,25 @@ import { Card, StatusPill, inr, istDateTime, timeAgo } from "@/components/admin/
 import { Icon } from "@/components/Icon";
 import { planByVehicle } from "@/lib/site";
 import { isOneTime, leadPlanLabel, leadPriceLabel } from "@/lib/leads";
-import { addNote, updateStatus } from "../../../actions";
+import { addNote, createPaymentLink, updateStatus } from "../../../actions";
 
 export const metadata = { title: "Lead" };
 
+// availability_confirmed → payment_link_sent happens by creating a Razorpay link below
 const nextStep: Partial<Record<LeadStatus, { to: LeadStatus; label: string }>> = {
   new: { to: "contacted", label: "Mark as contacted" },
   contacted: { to: "availability_confirmed", label: "Confirm availability" },
-  availability_confirmed: { to: "payment_link_sent", label: "Mark payment link sent" },
-  payment_link_sent: { to: "active", label: "Mark as paid · activate" },
+  payment_link_sent: { to: "active", label: "Paid another way (cash / UPI) · activate" },
 };
+
+/** Total for one month (or the one-time cleaning) across all vehicles. */
+const amountDue = (l: Lead) => l.planPrice * (l.vehicleCount || 1);
+
+function paymentMessage(l: Lead) {
+  const first = l.name.split(" ")[0];
+  const what = isOneTime(l) ? "one-time car cleaning" : `${planByVehicle(l.vehicle)?.label} plan`;
+  return `Hi ${first}, here is your secure Razorpay payment link for your Carekar ${what} (${inr(amountDue(l))}${isOneTime(l) ? "" : " for the month"}): ${l.paymentLinkUrl ?? "[payment link]"}`;
+}
 
 const eventLabel: Record<string, string> = {
   session_start: "Visit started",
@@ -53,14 +62,15 @@ function templates(l: Lead) {
   return [
     ["Booking received", `Hi ${first}, thank you for booking with Carekar (Ref ${l.ref}). We're checking availability in ${l.society} and will confirm shortly.`],
     ["Availability confirmed", `Good news ${first}! Carekar is available in ${l.society}. Your ${what}. We'll share a secure payment link to confirm your booking.`],
-    ["Payment link", `Hi ${first}, here is your secure payment link for your Carekar ${isOneTime(l) ? `one-time car cleaning (${inr(l.planPrice)})` : `${plan?.label} plan (${inr(l.planPrice)}/month)`}: [Razorpay link]`],
+    ["Payment link", paymentMessage(l)],
     ["Payment received", `Thank you ${first}! Payment received. Your Carekar cleaning ${isOneTime(l) ? "is booked for" : "starts on"} ${l.startDate}. We'll keep you updated here on WhatsApp.`],
     ["Not serviceable yet", `Hi ${first}, thank you for your interest in Carekar. We don't service ${l.society} yet, but we'll message you as soon as we launch there.`],
   ] as const;
 }
 
-export default async function LeadPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function LeadPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> }) {
   const { id } = await params;
+  const { error } = await searchParams;
   const db = await readDB();
   const canEdit = can(await getAdmin(), "editor");
   const lead = db.leads.find((l) => l.id === id);
@@ -70,6 +80,8 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
   const payments = db.payments.filter((p) => p.leadId === lead.id);
   const wa = lead.whatsapp || lead.mobile;
   const step = nextStep[lead.status];
+  // a first link once availability is confirmed, or next month's link for an active plan
+  const canCharge = ["availability_confirmed", "payment_link_sent"].includes(lead.status) || (lead.status === "active" && !isOneTime(lead));
 
   const timeline = [
     ...lead.history.map((h) => ({ at: h.at, text: h.from ? `${statusLabel[h.from]} → ${statusLabel[h.to]}` : "Lead created", note: h.note, kind: "status" as const })),
@@ -106,11 +118,35 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
           <a href={`tel:+91${lead.mobile}`} className="btn-outline !min-h-12 text-sm"><Icon name="phone" className="size-4" /> Call</a>
           <a href={`https://wa.me/91${wa}`} target="_blank" rel="noopener" className="btn-wa !min-h-12 text-sm"><Icon name="whatsapp" className="size-4" /> WhatsApp</a>
         </div>
+        {error && (
+          <p className="mt-3 flex items-center gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-danger" role="alert">
+            <Icon name="alert" className="size-5 shrink-0" /> {error}
+          </p>
+        )}
+        {lead.paymentLinkUrl && (
+          <div className="mt-3 rounded-xl bg-leaf-100 p-3">
+            <p className="text-sm font-semibold text-forest-900">Payment link · {inr(amountDue(lead))} · awaiting payment</p>
+            <a href={lead.paymentLinkUrl} target="_blank" rel="noopener" className="block break-all text-sm text-forest-700 underline">{lead.paymentLinkUrl}</a>
+            <a href={`https://wa.me/91${wa}?text=${encodeURIComponent(paymentMessage(lead))}`} target="_blank" rel="noopener" className="btn-wa mt-2 w-full !min-h-12 text-sm">
+              <Icon name="whatsapp" className="size-4" /> Send link on WhatsApp
+            </a>
+            <p className="mt-2 text-xs text-ink-600">The lead becomes Active automatically once Razorpay confirms the payment.</p>
+          </div>
+        )}
+        {canEdit && canCharge && (
+          <form action={createPaymentLink} className="mt-2">
+            <input type="hidden" name="id" value={lead.id} />
+            <button className={(lead.paymentLinkUrl ? "btn-outline" : "btn-primary") + " w-full text-sm"}>
+              <Icon name="rupee" className="size-4" />
+              {lead.paymentLinkUrl ? "Create a new link" : lead.status === "active" ? `Create next month's link · ${inr(amountDue(lead))}` : `Create payment link · ${inr(amountDue(lead))}`}
+            </button>
+          </form>
+        )}
         {step && canEdit && (
           <form action={updateStatus} className="mt-2">
             <input type="hidden" name="id" value={lead.id} />
             <input type="hidden" name="status" value={step.to} />
-            <button className="btn-primary w-full text-sm">{step.label} <Icon name="arrowRight" className="size-4" /></button>
+            <button className={(lead.paymentLinkUrl ? "btn-outline" : "btn-primary") + " w-full text-sm"}>{step.label} <Icon name="arrowRight" className="size-4" /></button>
           </form>
         )}
       </div>
@@ -158,7 +194,6 @@ export default async function LeadPage({ params }: { params: Promise<{ id: strin
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-xs text-ink-400">Razorpay payment links are generated here automatically in Phase 3.</p>
           </Card>
 
           {canEdit ? (
