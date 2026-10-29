@@ -80,8 +80,8 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
   const payments = db.payments.filter((p) => p.leadId === lead.id);
   const wa = lead.whatsapp || lead.mobile;
   const step = nextStep[lead.status];
-  // a first link once availability is confirmed, or next month's link for an active plan
-  const canCharge = ["availability_confirmed", "payment_link_sent"].includes(lead.status) || (lead.status === "active" && !isOneTime(lead));
+  // a link for a booking that wasn't paid online, or next month's link for an active plan
+  const canCharge = ["new", "contacted", "availability_confirmed", "payment_link_sent"].includes(lead.status) || (lead.status === "active" && !isOneTime(lead));
 
   const timeline = [
     ...lead.history.map((h) => ({ at: h.at, text: h.from ? `${statusLabel[h.from]} → ${statusLabel[h.to]}` : "Lead created", note: h.note, kind: "status" as const })),

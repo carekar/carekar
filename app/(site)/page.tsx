@@ -122,7 +122,7 @@ export default async function Home() {
         {/* Trust strip */}
         <div className="mx-auto mt-4 max-w-6xl px-4 pb-8 md:mt-0">
           <ul className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:justify-center md:px-0">
-            {["Trained & verified staff", "Pay after availability is confirmed", "WhatsApp support", "No hidden charges"].map((t) => (
+            {["Trained & verified staff", "Secure payments by Razorpay", "WhatsApp support", "No hidden charges"].map((t) => (
               <li key={t} className="flex shrink-0 items-center gap-1.5 rounded-full border border-leaf-200 bg-white px-3.5 py-2 text-[13px] font-semibold text-forest-800">
                 <Icon name="checkCircle" className="size-4 text-leaf-400" strokeWidth={2.25} /> {t}
               </li>

@@ -8,14 +8,16 @@ import { getConfig } from "@/lib/settings";
 
 export const metadata: Metadata = { title: "Booking received", robots: { index: false } };
 
-type Params = { ref?: string; n?: string; v?: string; s?: string; c?: string; t?: string };
+type Params = { ref?: string; n?: string; v?: string; s?: string; c?: string; t?: string; paid?: string };
 
 export default async function ThankYou({ searchParams }: { searchParams: Promise<Params> }) {
-  const { ref = "", n = "", v, s = "", c, t } = await searchParams;
+  const { ref = "", n = "", v, s = "", c, t, paid: p } = await searchParams;
   const config = await getConfig();
   const plan = findPlan(config, v);
   const callback = c === "1";
   const single = t === "one_time";
+  // display only: payments are recorded by the API after Razorpay's signature is verified
+  const paid = p === "1";
   const message = `Hi Carekar, I just booked${ref ? ` — Ref ${ref}` : ""}${plan ? `, ${serviceLabel(config, single ? "one_time" : "subscription", v)}` : ""}${s ? `, ${s}` : ""}.`;
 
   return (
@@ -25,11 +27,13 @@ export default async function ThankYou({ searchParams }: { searchParams: Promise
           <Icon name="checkCircle" className="size-11" strokeWidth={1.75} />
         </span>
         <h1 className="mt-5 text-[32px] font-extrabold leading-tight text-forest-900">
-          {callback ? "We'll call you soon" : "Booking received"}
+          {callback ? "We'll call you soon" : paid ? "Payment received" : "Booking received"}
           {n ? `, ${n}!` : "!"}
         </h1>
         <p className="mx-auto mt-2 max-w-sm text-ink-600">
-          Our team will confirm availability{s ? ` in ${s}` : ""} and reach you on WhatsApp or phone shortly.
+          {paid
+            ? `Your booking is confirmed. Our team will reach you on WhatsApp${s ? ` to schedule your cleaning in ${s}` : ""}.`
+            : `Our team will confirm availability${s ? ` in ${s}` : ""} and reach you on WhatsApp or phone shortly.`}
         </p>
         {ref && (
           <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-forest-900 shadow-[var(--shadow-card)]">
@@ -46,8 +50,8 @@ export default async function ThankYou({ searchParams }: { searchParams: Promise
         <p className="font-bold text-forest-900">What happens next</p>
         <ol className="mt-4 space-y-4">
           {[
-            ["Availability check", "We confirm we service your society."],
-            ["Payment link on WhatsApp", "Pay securely via UPI, card or netbanking."],
+            paid ? ["Payment done", "A receipt is on its way from Razorpay."] : ["Availability check", "We confirm we service your society."],
+            paid ? ["Confirmation on WhatsApp", "We confirm your slot and parking details."] : ["Payment", "Pay securely via UPI, card or netbanking from My bookings."],
             single ? ["Cleaning visit", "On your chosen date, interior + exterior."] : ["Cleaning starts", "From your preferred start date."],
           ].map(([t, d], i) => (
             <li key={t} className="flex gap-3">

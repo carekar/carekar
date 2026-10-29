@@ -140,7 +140,7 @@ export type CustomerBooking = Pick<
 
 /** Customer-facing wording for each pipeline status. */
 export const customerStatus: Record<LeadStatus, { label: string; detail: string; tone: "pending" | "good" | "muted" | "bad" }> = {
-  new: { label: "Request received", detail: "We're checking availability in your society.", tone: "pending" },
+  new: { label: "Payment pending", detail: "Complete the payment to confirm your booking.", tone: "pending" },
   contacted: { label: "We've contacted you", detail: "Our team has reached out on WhatsApp or phone.", tone: "pending" },
   availability_confirmed: { label: "Available in your society", detail: "Your payment link is on its way.", tone: "pending" },
   payment_link_sent: { label: "Payment pending", detail: "Pay using the secure link we sent on WhatsApp.", tone: "pending" },

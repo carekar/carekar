@@ -110,7 +110,7 @@ export const faqs = [
   },
   {
     q: "When do I pay?",
-    a: "Only after we confirm that we service your society. You will receive a secure payment link on WhatsApp, and your subscription starts after payment.",
+    a: "When you book. You pay securely through Razorpay (UPI, card or netbanking), your booking is confirmed straight away, and we message you on WhatsApp to schedule the cleaning.",
   },
   {
     q: "Is my society covered?",
@@ -125,6 +125,6 @@ export const faqs = [
 export const howItWorks = [
   { title: "Choose Your Plan", text: "Pick your vehicle type and see your monthly price." },
   { title: "Submit Your Details", text: "Share your name, society and preferred start date." },
-  { title: "Confirm Availability", text: "We confirm service in your society on WhatsApp or phone." },
-  { title: "Start Your Subscription", text: "Pay securely and your scheduled cleaning begins." },
+  { title: "Pay Securely", text: "Pay by UPI, card or netbanking through Razorpay." },
+  { title: "Cleaning Starts", text: "We confirm your slot on WhatsApp and your scheduled cleaning begins." },
 ];

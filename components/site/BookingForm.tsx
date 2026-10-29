@@ -9,6 +9,7 @@ import { findPlan } from "@/lib/config";
 import { useConfig } from "./ConfigProvider";
 import { leadSchema, oneTimeVehicleError, stepFields, type LeadInput } from "@/lib/validation";
 import { flushTracking, getSessionId, getTouches, getVisitorId, track } from "@/lib/track";
+import { payForBooking } from "@/lib/checkout";
 import { useCustomer } from "./useCustomer";
 import { GoogleButton, InAppBrowserNote } from "./GoogleLogin";
 
@@ -65,8 +66,10 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
   const [data, setData] = useState<Data>({ ...empty, service: initialService ?? "subscription", vehicle: initialVehicle ?? "" });
   const [step, setStep] = useState(1); // 1–4, 5 = review
   const [errors, setErrors] = useState<Errors>({});
-  const [submitting, setSubmitting] = useState<false | "book" | "callback">(false);
+  const [submitting, setSubmitting] = useState<false | "book" | "verifying" | "callback">(false);
   const [serverError, setServerError] = useState("");
+  // the saved booking while its payment is pending (cancelled / failed); cleared if details change
+  const [bookedRef, setBookedRef] = useState("");
   const [honeypot, setHoneypot] = useState("");
   // Google login is required to confirm a booking (not for a callback request)
   const account = useCustomer(step === 5, "booking");
@@ -137,6 +140,7 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
       track("form_started", { first_field: key });
     }
     lastField.current = key;
+    setBookedRef(""); // re-submit so the saved booking gets the new details
     setData((d) => ({ ...d, [key]: value }));
     if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
   };
@@ -211,12 +215,27 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
       try {
         localStorage.removeItem(DRAFT_KEY);
       } catch {}
-      const q = new URLSearchParams({ ref: json.ref, n: data.name.split(" ")[0], v: data.vehicle, s: data.society, c: mode === "callback" ? "1" : "0", t: data.service });
-      router.push("/book/thank-you?" + q.toString());
+      if (mode === "callback") return void router.push(thankYou(json.ref, "callback"));
+      setBookedRef(json.ref);
+      await pay(json.ref);
     } catch (e) {
       setServerError(e instanceof Error ? e.message : "Something went wrong");
       setSubmitting(false);
     }
+  };
+
+  const thankYou = (ref: string, kind: "callback" | "paid") =>
+    "/book/thank-you?" +
+    new URLSearchParams({ ref, n: data.name.split(" ")[0], v: data.vehicle, s: data.society, c: kind === "callback" ? "1" : "0", t: data.service, ...(kind === "paid" ? { paid: "1" } : {}) });
+
+  /** Payment confirms the booking. If it's cancelled or fails, the booking stays saved to retry here or on My bookings. */
+  const pay = async (ref: string) => {
+    setSubmitting("book");
+    setServerError("");
+    const result = await payForBooking(ref, account.token, { location: "booking", onVerifying: () => setSubmitting("verifying") });
+    if (result.paid) return void router.push(thankYou(ref, "paid"));
+    setServerError(result.error);
+    setSubmitting(false);
   };
 
   const plan = planByVehicle(data.vehicle);
@@ -460,7 +479,7 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
         {step === 5 && plan && (
           <section>
             <h1 className="text-[28px] font-extrabold leading-tight text-forest-900">Review your booking</h1>
-            <p className="mt-1 text-ink-600">You pay only after we confirm availability in your society.</p>
+            <p className="mt-1 text-ink-600">Pay securely to confirm your booking.</p>
 
             <div className="mt-5 overflow-hidden rounded-2xl bg-forest-900 text-white">
               <div className="flex items-center gap-4 p-4">
@@ -513,7 +532,7 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
                     <Icon name="user" className="size-5" /> Log in to confirm your booking
                   </p>
                   <p className="text-sm text-ink-600">
-                    One tap with your Google account, so you can track your booking and pay securely later. No password needed.
+                    One tap with your Google account, so you can pay securely and track your booking. No password needed.
                   </p>
                   <InAppBrowserNote location="booking" />
                   {account.error && (
@@ -527,7 +546,7 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
 
             <ol className="mt-6 space-y-3 rounded-2xl border border-leaf-200 p-4 text-sm text-ink-600">
               <p className="font-bold text-forest-900">What happens next</p>
-              {["We check availability in your society", "You get a secure payment link on WhatsApp", single ? "We clean your car on your chosen date" : "Your scheduled cleaning starts"].map((t, i) => (
+              {["Pay securely with Razorpay (UPI, card, netbanking)", "We confirm your slot on WhatsApp", single ? "We clean your car on your chosen date" : "Your scheduled cleaning starts"].map((t, i) => (
                 <li key={t} className="flex items-center gap-3">
                   <span className="grid size-6 shrink-0 place-items-center rounded-full bg-leaf-100 text-xs font-bold text-forest-700">{i + 1}</span>
                   {t}
@@ -548,14 +567,17 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
           ) : (
             <div className="flex flex-col gap-2">
               {account.customer || account.loading ? (
-                <button onClick={() => submit("book")} disabled={!!submitting || account.loading} className="btn-primary w-full disabled:opacity-70">
-                  {submitting === "book" ? "Booking…" : "Book Now"} {submitting !== "book" && <Icon name="arrowRight" className="size-[18px]" />}
+                <>
+                <button onClick={() => (bookedRef ? pay(bookedRef) : submit("book"))} disabled={!!submitting || account.loading} className="btn-primary w-full disabled:opacity-70">
+                  {submitting === "verifying" ? "Confirming payment…" : submitting === "book" ? "Opening secure payment…" : <>Pay {formatINR(price * data.vehicleCount)} &amp; book <Icon name="arrowRight" className="size-[18px]" /></>}
                 </button>
+                <p className="-mt-1 text-center text-xs text-ink-400">Payments secured by Razorpay</p>
+                </>
               ) : (
                 // after a successful Google login the booking is confirmed straight away
                 <GoogleButton
-                  label="Continue with Google to book"
-                  busy={account.busy || submitting === "book"}
+                  label="Continue with Google to pay & book"
+                  busy={account.busy || submitting === "book" || submitting === "verifying"}
                   onClick={async () => {
                     if (await account.signIn()) await submit("book");
                   }}

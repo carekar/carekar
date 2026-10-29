@@ -1,5 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
-import type { CustomerBooking, Lead } from "../../../lib/types";
+import type { CustomerBooking, Lead, LeadStatus, Payment } from "../../../lib/types";
 import { customerFromToken, type Customer } from "../customer";
 import { recordOnlinePayment } from "../payments";
 import { capturedPayment, createOrder, fetchOrder, publicKeyId, razorpayConfigured, validCheckoutSignature } from "../razorpay";
@@ -21,13 +21,16 @@ async function requireCustomer(req: Request, res: Response, next: NextFunction) 
   next();
 }
 
-/** Payment only after the team confirms availability, or when they've sent a renewal link. */
-const payable = (l: Lead) => l.status === "availability_confirmed" || l.status === "payment_link_sent" || !!l.paymentLinkUrl;
+const unpaidStatuses: LeadStatus[] = ["new", "contacted", "availability_confirmed", "payment_link_sent"];
 
-/** One of the logged-in customer's own bookings, by ref (CK-1001). */
+/** Customers pay when booking (or later, if that was cancelled), and again when the team sends a renewal link. */
+const payable = (l: Lead, payments: Payment[]) =>
+  !!l.paymentLinkUrl || (unpaidStatuses.includes(l.status) && !payments.some((p) => p.status === "captured"));
+
+/** One of the logged-in customer's own bookings, by ref (CK-1001), with its payments. */
 async function ownBooking(req: Request) {
   const rows = await repo().customerBookings(req.customer!.uid);
-  return rows.find((r) => r.lead.ref === req.params.ref)?.lead ?? null;
+  return rows.find((r) => r.lead.ref === req.params.ref) ?? null;
 }
 
 export const customerRoutes = Router();
@@ -51,7 +54,7 @@ customerRoutes.get("/bookings", async (req, res) => {
     callbackRequested: l.callbackRequested,
     timeline: l.history.map((h) => ({ at: h.at, to: h.to })),
     payments: payments.map((p) => ({ amount: p.amount, status: p.status, at: p.at, method: p.method })),
-    payable: razorpayConfigured() && payable(l),
+    payable: razorpayConfigured() && payable(l, payments),
   }));
   res.json({ customer: req.customer, bookings });
 });
@@ -61,9 +64,10 @@ customerRoutes.post("/bookings/:ref/order", async (req, res) => {
   if (!razorpayConfigured()) {
     return void res.status(503).json({ error: "Online payment isn't available right now. Please use the payment link we send on WhatsApp." });
   }
-  const lead = await ownBooking(req);
-  if (!lead) return void res.status(404).json({ error: "Booking not found" });
-  if (!payable(lead)) return void res.status(409).json({ error: "There's nothing to pay for this booking right now." });
+  const own = await ownBooking(req);
+  if (!own) return void res.status(404).json({ error: "Booking not found" });
+  const { lead } = own;
+  if (!payable(lead, own.payments)) return void res.status(409).json({ error: "This booking is already paid." });
   const order = await createOrder(lead);
   res.json({
     ...order,
@@ -81,7 +85,7 @@ customerRoutes.post("/bookings/:ref/verify", async (req, res) => {
   if (!validCheckoutSignature(orderId, paymentId, signature)) {
     return void res.status(400).json({ error: "We couldn't verify this payment" });
   }
-  const lead = await ownBooking(req);
+  const lead = (await ownBooking(req))?.lead;
   if (!lead) return void res.status(404).json({ error: "Booking not found" });
 
   // the order must be one we created for this booking, and the payment must belong to it

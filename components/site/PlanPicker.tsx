@@ -102,7 +102,7 @@ export function PlanPicker() {
       </button>
       <p className="mt-4 text-center text-sm text-ink-600">
         <Icon name="shield" className="mr-1 inline size-4 align-[-3px] text-forest-700" />
-        No hidden charges · Pay only after availability is confirmed
+        No hidden charges · Secure payment by Razorpay
       </p>
     </div>
   );
