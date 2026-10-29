@@ -141,28 +141,42 @@ export function buildDemoData(): DB {
         status = to;
         return true;
       };
-      const fresh = ageDays < 0.3;
-      if (!fresh && r() < 0.9 && move("contacted", 0.2, 6)) {
-        const notCovered = society === "Paramount Emotions" || society === "Arihant Arden";
-        if (notCovered && r() < 0.8) {
-          move("not_serviceable", 2, 24);
-        } else if (r() < 0.85 && move("availability_confirmed", 2, 30)) {
-          if (r() < 0.93 && move("payment_link_sent", 0.5, 12)) {
-            if (r() < 0.72) {
-              if (move("active", 1, 48)) {
-                const payAt = at;
-                db.payments.push({ id: "pay_demo_" + db.seq, leadId: id, amount: price, method: pick(["upi", "upi", "upi_autopay", "card", "netbanking"]), status: "captured", at: new Date(payAt).toISOString(), demo: true });
-                if (!single && now - payAt > 30 * DAY) {
-                  if (r() < 0.85) db.payments.push({ id: "pay_demo_r" + db.seq, leadId: id, amount: price, method: "upi_autopay", status: "captured", at: new Date(payAt + 30 * DAY).toISOString(), demo: true });
-                  else move("cancelled", 30 * 24, 31 * 24);
-                }
-                if (r() < 0.06) db.payments.push({ id: "pay_demo_f" + db.seq, leadId: id, amount: price, method: "card", status: "failed", at: new Date(payAt - 600000).toISOString(), demo: true });
-              }
-            } else if (ageDays > 3) {
-              lostReason = pick(lostReasons);
-              move("lost", 48, 96);
-            }
+      const callback = r() < 0.12;
+      const vehicles = r() < 0.1 ? 2 : 1;
+      const amount = price * vehicles;
+      const paid = (method: Payment["method"]) => {
+        const payAt = at;
+        db.payments.push({ id: "pay_demo_" + db.seq, leadId: id, amount, method, status: "captured", at: new Date(payAt).toISOString(), razorpayPaymentId: "pay_demo" + db.seq, demo: true });
+        if (!single && now - payAt > 30 * DAY) {
+          if (r() < 0.85) db.payments.push({ id: "pay_demo_r" + db.seq, leadId: id, amount, method: "upi", status: "captured", at: new Date(payAt + 30 * DAY).toISOString(), razorpayPaymentId: "pay_demo_r" + db.seq, demo: true });
+          else move("cancelled", 30 * 24, 31 * 24);
+        }
+      };
+
+      if (!callback) {
+        // pay at booking: the Razorpay window opens right after submitting
+        ev("payment_started", { amount, location: "booking" }, "/book");
+        if (r() < 0.78) {
+          ev("payment_success", { amount, location: "booking" }, "/book");
+          if (move("active", 0.01, 0.05)) paid(pick(["upi", "upi", "upi", "card", "netbanking", "wallet"]));
+        } else {
+          const failed = r() < 0.3;
+          ev(failed ? "payment_failed" : "payment_cancelled", { amount, location: "booking" }, "/book");
+          if (failed) db.payments.push({ id: "pay_demo_f" + db.seq, leadId: id, amount, method: "card", status: "failed", at: new Date(t).toISOString(), razorpayPaymentId: "pay_demo_f" + db.seq, demo: true });
+          // some come back: the team sends a payment link on WhatsApp
+          if (ageDays > 0.3 && r() < 0.4 && move("contacted", 0.5, 6) && move("payment_link_sent", 0.2, 4)) {
+            if (r() < 0.6 && move("active", 1, 36)) paid("upi");
+          } else if (ageDays > 3 && r() < 0.6) {
+            lostReason = pick(lostReasons);
+            move("lost", 48, 96);
           }
+        }
+      } else if (ageDays > 0.3 && r() < 0.9 && move("contacted", 0.2, 6)) {
+        // callback requests are handled by the team, then paid by link
+        const notCovered = society === "Paramount Emotions" || society === "Arihant Arden";
+        if (notCovered && r() < 0.8) move("not_serviceable", 2, 24);
+        else if (r() < 0.8 && move("availability_confirmed", 2, 30) && move("payment_link_sent", 0.5, 12)) {
+          if (r() < 0.65 && move("active", 1, 48)) paid("upi");
         } else if (ageDays > 3 && (status as LeadStatus) === "contacted") {
           lostReason = pick(lostReasons);
           move("lost", 24, 72);
@@ -172,7 +186,7 @@ export function buildDemoData(): DB {
       db.leads.push({
         id, ref, createdAt: createdAt.toISOString(),
         service: single ? "one_time" : "subscription",
-        vehicle: plan.vehicle, vehicleModel: r() < 0.7 ? pick(models[plan.vehicle]) : "", vehicleCount: r() < 0.1 ? 2 : 1,
+        vehicle: plan.vehicle, vehicleModel: r() < 0.7 ? pick(models[plan.vehicle]) : "", vehicleCount: vehicles,
         name, mobile: String(9 - Math.floor(r() * 3)) + String(Math.floor(r() * 1e9)).padStart(9, "0"),
         sameWhatsapp: true, whatsapp: "",
         society, towerFlat: r() < 0.7 ? `Tower ${String.fromCharCode(65 + Math.floor(r() * 8))}, ${Math.floor(r() * 20) + 1}0${Math.floor(r() * 9) + 1}` : "",
@@ -180,7 +194,7 @@ export function buildDemoData(): DB {
         startDate: new Date(createdAt.getTime() + 2 * DAY).toISOString().slice(0, 10),
         preferredTime: pick(["Early morning (5–7 AM)", "Morning (7–9 AM)", "No preference"]),
         vehicleColour: "", registrationNo: "", heardFrom: "", notes: "",
-        callbackRequested: r() < 0.25,
+        callbackRequested: callback,
         planPrice: price, status, lostReason, history, teamNotes: [],
         visitorId,
         firstTouch: { channel: ch.key, source: ch.source, medium: ch.medium, campaign: session.campaign, landing: "/", at: session.startedAt },

@@ -117,8 +117,10 @@ export const postgresRepo: Repo = {
     // Razorpay retries webhooks, so the same payment can arrive more than once
     if (p.razorpayPaymentId && (await db.payment.findUnique({ where: { razorpayPaymentId: p.razorpayPaymentId } }))) return false;
     await db.payment.create({ data: { ...p, at: new Date(p.at) } });
-    await db.lead.update({ where: { id: p.leadId }, data: { paymentLinkId: null, paymentLinkUrl: null } });
-    await postgresRepo.setStatus(p.leadId, "active", "Paid online (Razorpay)");
+    if (p.status === "captured") {
+      await db.lead.update({ where: { id: p.leadId }, data: { paymentLinkId: null, paymentLinkUrl: null } });
+      await postgresRepo.setStatus(p.leadId, "active", "Paid online (Razorpay)");
+    }
     return true;
   },
 

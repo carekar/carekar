@@ -94,7 +94,7 @@ export function FunnelBars({ steps, linkFor }: { steps: { key: string; label: st
         const drop = prev - s.count;
         const width = Math.max(2, (s.count / top) * 100);
         const href = linkFor?.(s.key);
-        const sales = s.group === "sales";
+        const sales = s.group === "payment";
         const content = (
           <>
             <div className="flex items-baseline justify-between gap-3 text-sm">

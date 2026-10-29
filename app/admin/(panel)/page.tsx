@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { readDB } from "@/lib/store";
-import { businessFunnel, dailySeries, makeRange, needsAction, overviewKpis, pct, previousRange, subscriptionStats } from "@/lib/analytics";
+import { businessFunnel, dailySeries, makeRange, needsAction, overviewKpis, pct, previousRange, stepCount, subscriptionStats } from "@/lib/analytics";
 import { Card, Columns, FunnelBars, Kpi, PageHeader, RangeTabs, StatusPill, inr, timeAgo } from "@/components/admin/ui";
 import { Icon } from "@/components/Icon";
 import { leadPlanLabel } from "@/lib/leads";
@@ -19,12 +19,13 @@ export default async function Overview({ searchParams }: { searchParams: Promise
   const todo = needsAction(db);
   const series = dailySeries(db, makeRange(Math.max(days, 14)));
   const funnel = businessFunnel(db, r);
-  const visitors = funnel[0].count;
+  const visitors = stepCount(funnel, "visited");
 
   const actionItems = [
-    { n: todo.fresh.length + todo.stale.length, label: "New leads to contact", sub: todo.stale.length ? `${todo.stale.length} waiting over 2 hours` : "All within 2 hours", href: "/admin/leads?status=new", urgent: todo.stale.length > 0 },
-    { n: todo.awaitingCheck.length, label: "Availability to confirm", sub: "Contacted, not yet confirmed", href: "/admin/leads?status=contacted" },
-    { n: todo.awaitingPayment.length, label: "Awaiting payment", sub: "Payment link sent", href: "/admin/leads?status=payment_link_sent" },
+    { n: todo.newlyPaid.length, label: "New paid bookings", sub: "Paid in the last 48 hours · confirm the slot on WhatsApp", href: "/admin/leads?status=active" },
+    { n: todo.unpaid.length, label: "Booked but not paid", sub: "Closed the payment window · send a payment link", href: "/admin/payments#unpaid", urgent: todo.unpaid.length > 0 },
+    { n: todo.callbacks.length, label: "Callback requests", sub: todo.staleCallbacks.length ? `${todo.staleCallbacks.length} waiting over 2 hours` : "All within 2 hours", href: "/admin/leads?status=new&callback=1", urgent: todo.staleCallbacks.length > 0 },
+    { n: todo.awaitingPayment.length, label: "Payment links awaiting payment", sub: "Link sent, not paid yet", href: "/admin/leads?status=payment_link_sent" },
     { n: todo.failed.length, label: "Failed payments (7 days)", sub: "Follow up on WhatsApp", href: "/admin/payments", urgent: todo.failed.length > 0 },
   ];
 
@@ -44,8 +45,8 @@ export default async function Overview({ searchParams }: { searchParams: Promise
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Visitors" value={k.visitors.toLocaleString("en-IN")} delta={delta(k.visitors, kp.visitors)} sub="vs prev." icon="users" />
-        <Kpi label="Leads" value={String(k.leads)} delta={delta(k.leads, kp.leads)} sub={`${pct(k.leads, k.visitors)}% of visitors`} icon="list" />
-        <Kpi label="Paid customers" value={String(k.paid)} delta={delta(k.paid, kp.paid)} sub={`${pct(k.paid, k.leads)}% of leads`} icon="checkCircle" />
+        <Kpi label="Bookings" value={String(k.leads)} delta={delta(k.leads, kp.leads)} sub={`${pct(k.leads, k.visitors)}% of visitors`} icon="list" />
+        <Kpi label="Paid bookings" value={String(k.paid)} delta={delta(k.paid, kp.paid)} sub={`${pct(k.paid, k.leads)}% of bookings`} icon="checkCircle" />
         <Kpi label="Collected" value={inr(k.revenue)} delta={delta(k.revenue, kp.revenue)} sub="vs prev." icon="wallet" />
       </div>
 
@@ -105,14 +106,14 @@ export default async function Overview({ searchParams }: { searchParams: Promise
             data={series.map((d) => ({ label: d.day.slice(5), values: [d.visitors, d.leads * 10] }))}
             keys={[
               { label: "Visitors", tone: "bg-leaf-200" },
-              { label: "Leads (×10)", tone: "bg-forest-700" },
+              { label: "Bookings (×10)", tone: "bg-forest-700" },
             ]}
           />
         </Card>
         <Card title={`Funnel · last ${days === 1 ? "24 hours" : days + " days"}`} action={<Link href={`/admin/funnel?d=${days}`} className="text-sm font-semibold text-forest-700">Details</Link>}>
-          <FunnelBars steps={[funnel[0], funnel[3], funnel[6], funnel[10]]} />
+          <FunnelBars steps={["visited", "plan", "submitted", "checkout", "paid"].map((key) => funnel.find((s) => s.key === key)!)} />
           <p className="mt-3 text-xs text-ink-400">
-            {pct(funnel[10].count, visitors)}% of visitors became paying customers
+            {pct(stepCount(funnel, "paid"), visitors)}% of visitors paid · {pct(stepCount(funnel, "paid"), stepCount(funnel, "submitted"))}% of bookings paid
           </p>
         </Card>
       </div>

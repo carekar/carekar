@@ -10,14 +10,19 @@ import { repo } from "./repo";
  */
 export async function recordOnlinePayment(lead: Lead, pay: Pick<RazorpayPayment, "id" | "amount" | "method" | "created_at">) {
   const amount = Math.round(pay.amount / 100);
-  const recorded = await repo().recordPayment({
-    leadId: lead.id,
-    amount,
-    method: paymentMethod(pay.method),
-    status: "captured",
-    at: new Date((pay.created_at || Date.now() / 1000) * 1000).toISOString(),
-    razorpayPaymentId: pay.id,
-  });
+  const recorded = await repo().recordPayment({ ...fields(lead, pay), status: "captured" });
   if (recorded) await notifyPayment({ id: lead.id, ref: lead.ref, name: lead.name, amount: formatINR(amount), method: pay.method });
   return recorded;
 }
+
+/** A failed attempt, shown on the Payments page for follow-up. The booking stays as it is. */
+export const recordFailedPayment = (lead: Lead, pay: Pick<RazorpayPayment, "id" | "amount" | "method" | "created_at">) =>
+  repo().recordPayment({ ...fields(lead, pay), status: "failed" });
+
+const fields = (lead: Lead, pay: Pick<RazorpayPayment, "id" | "amount" | "method" | "created_at">) => ({
+  leadId: lead.id,
+  amount: Math.round(pay.amount / 100),
+  method: paymentMethod(pay.method),
+  at: new Date((pay.created_at || Date.now() / 1000) * 1000).toISOString(),
+  razorpayPaymentId: pay.id,
+});

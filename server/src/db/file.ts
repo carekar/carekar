@@ -122,13 +122,13 @@ export const fileRepo: Repo = {
       if (p.razorpayPaymentId && db.payments.some((x) => x.razorpayPaymentId === p.razorpayPaymentId)) return false;
       db.payments.push({ ...p, id: crypto.randomUUID() });
       const l = db.leads.find((x) => x.id === p.leadId);
-      if (l) {
+      if (l && p.status === "captured") {
         delete l.paymentLinkId;
         delete l.paymentLinkUrl;
       }
       return true;
     });
-    if (recorded) await fileRepo.setStatus(p.leadId, "active", "Paid online (Razorpay)");
+    if (recorded && p.status === "captured") await fileRepo.setStatus(p.leadId, "active", "Paid online (Razorpay)");
     return recorded;
   },
 

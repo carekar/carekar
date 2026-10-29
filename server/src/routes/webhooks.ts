@@ -1,5 +1,5 @@
 import express, { Router } from "express";
-import { recordOnlinePayment } from "../payments";
+import { recordFailedPayment, recordOnlinePayment } from "../payments";
 import { fetchOrder, validSignature, type RazorpayPayment } from "../razorpay";
 import { repo } from "../repo";
 
@@ -36,12 +36,14 @@ webhookRoutes.post("/razorpay", express.raw({ type: () => true, limit: "1mb" }),
     const lead = leadId ? await repo().getLead(leadId) : null;
     if (lead && pay?.id && pay.amount) await recordOnlinePayment(lead, pay);
     else console.warn("[razorpay] paid link without a known lead", leadId, pay?.id);
-  } else if (event.event === "payment.captured" && pay?.id && pay.order_id) {
-    // checkout on /account; backs up the verify call in case the customer closed the page.
-    // Payment-link payments also arrive here, without our lead_id on the order, and are skipped.
+  } else if ((event.event === "payment.captured" || event.event === "payment.failed") && pay?.id && pay.order_id) {
+    // checkout on the booking form / My bookings: backs up the verify call in case the customer
+    // closed the page, and logs failed attempts. Payment-link payments also arrive here, without
+    // our lead_id on the order, and are skipped (payment_link.paid covers them).
     const order = await fetchOrder(pay.order_id);
     const lead = order.notes?.lead_id ? await repo().getLead(order.notes.lead_id) : null;
-    if (lead) await recordOnlinePayment(lead, pay);
+    if (lead && event.event === "payment.captured") await recordOnlinePayment(lead, pay);
+    else if (lead) await recordFailedPayment(lead, pay);
   }
   // Other events are acknowledged so Razorpay doesn't retry them.
   res.json({ ok: true });

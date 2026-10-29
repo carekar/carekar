@@ -26,6 +26,20 @@ export const istDay = (iso: string) => new Date(Date.parse(iso) + IST).toISOStri
 const statusOrder: LeadStatus[] = ["new", "contacted", "availability_confirmed", "payment_link_sent", "active"];
 export const reached = (l: Lead, s: LeadStatus) => l.history.some((h) => h.to === s || statusOrder.indexOf(h.to) > statusOrder.indexOf(s));
 
+/** Money actually collected per lead (captured Razorpay payments + any recorded manually). */
+export function collectedByLead(db: DB) {
+  const m = new Map<string, number>();
+  for (const p of db.payments) if (p.status === "captured") m.set(p.leadId, (m.get(p.leadId) || 0) + p.amount);
+  return m;
+}
+
+/** A booking that was submitted (not a callback request) and never paid. */
+export const isUnpaidBooking = (l: Lead, collected: Map<string, number>) =>
+  l.status === "new" && !l.callbackRequested && !collected.has(l.id);
+
+/** Count of a funnel step by key (0 if missing). */
+export const stepCount = (steps: FunnelStep[], key: string) => steps.find((s) => s.key === key)?.count ?? 0;
+
 /** Sessions in range (with filters) and the visitor → first-session map used for attribution. */
 function scope(db: DB, r: Range, f: Filters) {
   const sessions = db.sessions.filter(
@@ -39,7 +53,7 @@ function scope(db: DB, r: Range, f: Filters) {
   return { sessions, visitorSession, events, leads };
 }
 
-export type FunnelStep = { key: string; label: string; count: number; group: "website" | "sales" };
+export type FunnelStep = { key: string; label: string; count: number; group: "website" | "payment" };
 
 export function businessFunnel(db: DB, r: Range, f: Filters = {}): FunnelStep[] {
   const { visitorSession, events, leads } = scope(db, r, f);
@@ -60,26 +74,48 @@ export function businessFunnel(db: DB, r: Range, f: Filters = {}): FunnelStep[] 
     ["plan", "Viewed plan & price", has("plan_viewed")],
     ["book", "Opened booking form", has("book_clicked", "form_opened")],
     ["started", "Started form", has("form_started")],
-    ["submitted", "Submitted lead", has("lead_submitted")],
+    ["submitted", "Booked (details submitted)", has("lead_submitted")],
+    ["checkout", "Opened payment", has("payment_started")],
   ];
   const steps: FunnelStep[] = [];
   let prev: Set<string> | null = null;
   for (const [key, label, set] of chain) {
     const cur: Set<string> = prev ? new Set([...set].filter((v) => prev!.has(v))) : set;
-    steps.push({ key, label, count: cur.size, group: "website" });
+    steps.push({ key, label, count: cur.size, group: key === "checkout" ? "payment" : "website" });
     prev = cur;
   }
-  const submitted = steps[steps.length - 1].count;
-  const leadCount = Math.max(submitted, leads.length);
-  steps[steps.length - 1].count = leadCount;
-  const salesSteps: [string, string, LeadStatus][] = [
-    ["contacted", "Contacted by team", "contacted"],
-    ["confirmed", "Availability confirmed", "availability_confirmed"],
-    ["link", "Payment link sent", "payment_link_sent"],
-    ["paid", "Paid · subscription active", "active"],
-  ];
-  for (const [key, label, s] of salesSteps) steps.push({ key, label, count: leads.filter((l) => reached(l, s)).length, group: "sales" });
+  // bookings are counted from the leads table too (events can be blocked by ad blockers)
+  const submitted = steps.find((s) => s.key === "submitted")!;
+  submitted.count = Math.max(submitted.count, leads.length);
+  // paid = Razorpay-verified (or marked paid by the team), whichever way they paid
+  steps.push({ key: "paid", label: "Paid", count: leads.filter((l) => reached(l, "active")).length, group: "payment" });
   return steps;
+}
+
+/** Razorpay checkout outcomes from the website (booking form and My bookings), plus unpaid bookings. */
+export function checkoutStats(db: DB, r: Range) {
+  const events = db.events.filter((e) => inRange(e.at, r) && e.name.startsWith("payment_"));
+  const count = (name: string) => events.filter((e) => e.name === name).length;
+  const byLocation = new Map<string, { location: string; started: number; paid: number; cancelled: number; failed: number }>();
+  for (const e of events) {
+    const k = String(e.props?.location ?? "unknown");
+    if (!byLocation.has(k)) byLocation.set(k, { location: k, started: 0, paid: 0, cancelled: 0, failed: 0 });
+    const x = byLocation.get(k)!;
+    if (e.name === "payment_started") x.started++;
+    else if (e.name === "payment_success") x.paid++;
+    else if (e.name === "payment_cancelled") x.cancelled++;
+    else if (e.name === "payment_failed") x.failed++;
+  }
+  const collected = collectedByLead(db);
+  const unpaid = db.leads.filter((l) => inRange(l.createdAt, r) && isUnpaidBooking(l, collected)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return {
+    started: count("payment_started"),
+    paid: count("payment_success"),
+    cancelled: count("payment_cancelled"),
+    failed: count("payment_failed"),
+    byLocation: [...byLocation.values()],
+    unpaid,
+  };
 }
 
 export function dailySeries(db: DB, r: Range) {
@@ -138,18 +174,25 @@ export function subscriptionStats(db: DB) {
 
 export function needsAction(db: DB) {
   const now = Date.now();
-  const stale = db.leads.filter((l) => l.status === "new" && now - Date.parse(l.createdAt) > 2 * 3600000);
-  const fresh = db.leads.filter((l) => l.status === "new" && now - Date.parse(l.createdAt) <= 2 * 3600000);
-  const awaitingCheck = db.leads.filter((l) => l.status === "contacted");
+  const collected = collectedByLead(db);
+  const firstPaid = new Map<string, number>();
+  for (const p of db.payments) if (p.status === "captured") firstPaid.set(p.leadId, Math.min(firstPaid.get(p.leadId) ?? Infinity, Date.parse(p.at)));
+  // paid at booking in the last 48 hours: confirm the slot on WhatsApp
+  const newlyPaid = db.leads.filter((l) => l.status === "active" && now - (firstPaid.get(l.id) ?? 0) < 2 * 86400000);
+  // booked but closed the payment window more than 30 minutes ago
+  const unpaid = db.leads.filter((l) => isUnpaidBooking(l, collected) && now - Date.parse(l.createdAt) > 30 * 60000);
+  const callbacks = db.leads.filter((l) => l.status === "new" && l.callbackRequested);
+  const staleCallbacks = callbacks.filter((l) => now - Date.parse(l.createdAt) > 2 * 3600000);
   const awaitingPayment = db.leads.filter((l) => l.status === "payment_link_sent");
   const failed = db.payments.filter((p) => p.status === "failed" && now - Date.parse(p.at) < 7 * 86400000);
   const lastLead = db.leads.reduce((m, l) => Math.max(m, Date.parse(l.createdAt)), 0);
-  return { stale, fresh, awaitingCheck, awaitingPayment, failed, noLeads24h: now - lastLead > 86400000 };
+  return { newlyPaid, unpaid, callbacks, staleCallbacks, awaitingPayment, failed, noLeads24h: now - lastLead > 86400000 };
 }
 
 /** Group visitors → leads → paid by a session dimension. */
 export function breakdown(db: DB, r: Range, dim: "channel" | "device" | "browser" | "campaign" | "landing", f: Filters = {}) {
   const { visitorSession, leads } = scope(db, r, f);
+  const collected = collectedByLead(db);
   const rows = new Map<string, { key: string; visitors: number; leads: number; paid: number; revenue: number }>();
   const row = (k: string) => {
     if (!rows.has(k)) rows.set(k, { key: k, visitors: 0, leads: 0, paid: 0, revenue: 0 });
@@ -160,21 +203,20 @@ export function breakdown(db: DB, r: Range, dim: "channel" | "device" | "browser
     const s = l.visitorId ? visitorSession.get(l.visitorId) : undefined;
     const k = (s?.[dim] as string) || "(none)";
     row(k).leads++;
-    if (reached(l, "active")) {
-      row(k).paid++;
-      row(k).revenue += l.planPrice;
-    }
+    if (reached(l, "active")) row(k).paid++;
+    row(k).revenue += collected.get(l.id) || 0;
   }
   return [...rows.values()].sort((a, b) => b.visitors - a.visitors);
 }
 
 export function vehicleBreakdown(db: DB, r: Range, f: Filters = {}) {
   const { events, leads } = scope(db, r, f);
+  const collected = collectedByLead(db);
   return plans.map((p) => {
     const viewed = new Set(events.filter((e) => e.name === "plan_viewed" && e.props?.vehicle === p.vehicle).map((e) => e.visitorId)).size;
     const l = leads.filter((x) => x.vehicle === p.vehicle);
     const paid = l.filter((x) => reached(x, "active")).length;
-    return { key: p.label, viewed, leads: l.length, paid, revenue: paid * p.price };
+    return { key: p.label, viewed, leads: l.length, paid, revenue: l.reduce((s, x) => s + (collected.get(x.id) || 0), 0) };
   });
 }
 
@@ -213,7 +255,9 @@ export function formAnalytics(db: DB, r: Range, f: Filters = {}) {
     { label: "Step 2 · Your details", count: uniq((e) => e.name === "form_step_completed" && e.props?.step === 2), median: durations(2) },
     { label: "Step 3 · Location", count: uniq((e) => e.name === "form_step_completed" && e.props?.step === 3), median: durations(3) },
     { label: "Step 4 · Schedule", count: uniq((e) => e.name === "form_step_completed" && e.props?.step === 4), median: durations(4) },
-    { label: "Submitted", count: uniq((e) => e.name === "lead_submitted"), median: 0 },
+    { label: "Submitted (booked)", count: uniq((e) => e.name === "lead_submitted"), median: 0 },
+    { label: "Opened payment", count: uniq((e) => e.name === "payment_started" && e.props?.location === "booking"), median: 0 },
+    { label: "Paid", count: uniq((e) => e.name === "payment_success" && e.props?.location === "booking"), median: 0 },
   ];
   const count = (key: string, list: TrackEvent[]) => {
     const m = new Map<string, number>();
@@ -273,6 +317,7 @@ export function salesFunnel(db: DB, r: Range) {
   return {
     total: leads.length,
     times: {
+      bookingToPaid: times("new", "active"),
       firstResponse: times("new", "contacted"),
       confirmation: times("contacted", "availability_confirmed"),
       payment: times("payment_link_sent", "active"),

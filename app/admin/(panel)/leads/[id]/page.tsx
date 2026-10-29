@@ -51,7 +51,12 @@ const eventLabel: Record<string, string> = {
   whatsapp_clicked: "Tapped WhatsApp",
   call_clicked: "Tapped Call",
   faq_opened: "Opened FAQ",
-  lead_status_changed: "Status changed by team",
+  lead_status_changed: "Status changed",
+  payment_started: "Opened Razorpay payment",
+  payment_success: "Paid online",
+  payment_cancelled: "Closed payment window",
+  payment_failed: "Payment failed",
+  account_viewed: "Viewed My bookings",
 };
 const quiet = new Set(["page_view", "scroll_depth", "section_view", "form_step_viewed"]);
 
@@ -236,7 +241,10 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
               <ul className="space-y-2 text-sm">
                 {payments.map((p) => (
                   <li key={p.id} className="flex items-center justify-between gap-3">
-                    <span>{istDateTime(p.at)} · {p.method.replace("_", " ")}</span>
+                    <span className="min-w-0">
+                      {istDateTime(p.at)} · {p.method.replace("_", " ")}
+                      <span className="block truncate font-mono text-xs text-ink-400">{p.razorpayPaymentId ?? "Recorded manually"}</span>
+                    </span>
                     <span className={"font-bold " + (p.status === "captured" ? "text-forest-700" : "text-danger")}>
                       {p.status === "captured" ? inr(p.amount) : "Failed"}
                     </span>
@@ -268,7 +276,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
             </ol>
           </Card>
 
-          <Card title="Journey before booking">
+          <Card title="Visitor journey">
             {journeyEvents.length ? (
               <ol className="relative space-y-3 border-l-2 border-cream-200 pl-4">
                 {journeyEvents.map((e, i) => {

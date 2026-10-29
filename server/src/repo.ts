@@ -12,7 +12,7 @@ export interface Repo {
   setStatus(id: string, to: LeadStatus, note?: string): Promise<void>;
   /** Keeps the latest payment link on the lead and moves it to "payment link sent" (active leads stay active). */
   savePaymentLink(id: string, link: { id: string; url: string }): Promise<void>;
-  /** Records a Razorpay payment once (false if already recorded), clears the paid link and makes the lead active. */
+  /** Records a Razorpay payment once (false if already recorded). A captured one also clears the paid link and makes the lead active. */
   recordPayment(p: Omit<Payment, "id">): Promise<boolean>;
   addNote(id: string, text: string): Promise<void>;
   clearDemo(): Promise<void>;

@@ -3,6 +3,7 @@ import { readDB } from "@/lib/store";
 import {
   breakdown,
   businessFunnel,
+  checkoutStats,
   cohorts,
   contactClicks,
   formAnalytics,
@@ -12,6 +13,7 @@ import {
   previousRange,
   salesFunnel,
   societyBreakdown,
+  stepCount,
   vehicleBreakdown,
   type Filters,
 } from "@/lib/analytics";
@@ -102,33 +104,32 @@ function FunnelTab({ db, days, f }: { db: DB; days: number; f: Filters }) {
   const r = makeRange(days);
   const steps = businessFunnel(db, r, f);
   const prev = businessFunnel(db, previousRange(r), f);
-  const top = steps[0].count;
-  const paid = steps[steps.length - 1].count;
-  const submitted = steps[6].count;
-  // Biggest drop-off between consecutive website steps
+  const n = (key: string, list = steps) => stepCount(list, key);
+  // Biggest drop-off between consecutive steps
   let worst = { label: "", rate: 1 };
-  for (let i = 1; i < 7; i++) {
+  for (let i = 1; i < steps.length; i++) {
     const rate = steps[i - 1].count ? steps[i].count / steps[i - 1].count : 1;
     if (rate < worst.rate) worst = { label: `${steps[i - 1].label} → ${steps[i].label}`, rate };
   }
   const contacts = contactClicks(db, r);
+  const co = checkoutStats(db, r);
   return (
     <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
       <Card title="Full journey · visit to paid">
         <FunnelBars steps={steps} />
         <div className="mt-4 flex flex-wrap gap-3 text-xs text-ink-600">
           <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-forest-700" /> Website</span>
-          <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-sun-400" /> Team / sales</span>
+          <span className="inline-flex items-center gap-1.5"><span className="size-2.5 rounded-sm bg-sun-400" /> Payment (Razorpay)</span>
         </div>
       </Card>
       <div className="min-w-0 space-y-4">
         <Card title="Conversion">
           <div className="grid grid-cols-2 gap-3">
             {[
-              ["Visit → lead", pct(submitted, top), pct(prev[6].count, prev[0].count)],
-              ["Lead → paid", pct(paid, submitted), pct(prev[10].count, prev[6].count)],
-              ["Visit → paid", pct(paid, top), pct(prev[10].count, prev[0].count)],
-              ["Plan view → book", pct(steps[4].count, steps[3].count), pct(prev[4].count, prev[3].count)],
+              ["Visit → booking", pct(n("submitted"), n("visited")), pct(n("submitted", prev), n("visited", prev))],
+              ["Booking → paid", pct(n("paid"), n("submitted")), pct(n("paid", prev), n("submitted", prev))],
+              ["Visit → paid", pct(n("paid"), n("visited")), pct(n("paid", prev), n("visited", prev))],
+              ["Plan view → book", pct(n("book"), n("plan")), pct(n("book", prev), n("plan", prev))],
             ].map(([l, v, p]) => (
               <div key={l as string} className="rounded-xl bg-cream-50 p-3">
                 <p className="text-xs text-ink-600">{l}</p>
@@ -138,9 +139,27 @@ function FunnelTab({ db, days, f }: { db: DB; days: number; f: Filters }) {
             ))}
           </div>
         </Card>
+        <Card title="Razorpay checkout" action={<Link href="/admin/payments" className="text-sm font-semibold text-forest-700">Payments</Link>}>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            {[
+              ["Opened", co.started],
+              ["Paid", co.paid],
+              ["Closed", co.cancelled],
+              ["Failed", co.failed],
+            ].map(([l, v]) => (
+              <div key={l} className="rounded-xl bg-cream-50 p-2.5">
+                <p className="font-display tabular text-xl font-extrabold text-forest-900">{v}</p>
+                <p className="text-[11px] text-ink-600">{l}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-ink-400">
+            {pct(co.paid, co.started)}% of opened payments were completed · {co.unpaid.length} booking{co.unpaid.length === 1 ? "" : "s"} still unpaid
+          </p>
+        </Card>
         {worst.label && (
           <div className="rounded-2xl bg-red-50 p-4 text-sm">
-            <p className="font-bold text-danger">Biggest website drop-off</p>
+            <p className="font-bold text-danger">Biggest drop-off</p>
             <p className="mt-1 text-ink-900">{worst.label}</p>
             <p className="text-ink-600">Only {Math.round(worst.rate * 100)}% continue to the next step.</p>
           </div>
@@ -160,19 +179,19 @@ function SourcesTab({ db, days }: { db: DB; days: number }) {
   const r = makeRange(days);
   const fmt = (rows: ReturnType<typeof breakdown>) =>
     rows.map((x) => [x.key, x.visitors, x.leads, `${pct(x.leads, x.visitors)}%`, x.paid, inr(x.revenue)]);
-  const head = ["Source", "Visitors", "Leads", "Lead %", "Paid", "Revenue"];
+  const head = ["Source", "Visitors", "Bookings", "Booking %", "Paid", "Collected"];
   const hrs = hourOfDay(db, r);
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card title="By channel" className="lg:col-span-2"><Table head={head} rows={fmt(breakdown(db, r, "channel"))} /></Card>
-      <Card title="By campaign / poster (UTM)"><Table head={["Campaign", "Visitors", "Leads", "Lead %", "Paid", "Revenue"]} rows={fmt(breakdown(db, r, "campaign").filter((x) => x.key !== "(none)"))} /></Card>
-      <Card title="By device"><Table head={["Device", "Visitors", "Leads", "Lead %", "Paid", "Revenue"]} rows={fmt(breakdown(db, r, "device"))} /></Card>
-      <Card title="By browser / in-app"><Table head={["Browser", "Visitors", "Leads", "Lead %", "Paid", "Revenue"]} rows={fmt(breakdown(db, r, "browser"))} /></Card>
+      <Card title="By campaign / poster (UTM)"><Table head={["Campaign", ...head.slice(1)]} rows={fmt(breakdown(db, r, "campaign").filter((x) => x.key !== "(none)"))} /></Card>
+      <Card title="By device"><Table head={["Device", ...head.slice(1)]} rows={fmt(breakdown(db, r, "device"))} /></Card>
+      <Card title="By browser / in-app"><Table head={["Browser", ...head.slice(1)]} rows={fmt(breakdown(db, r, "browser"))} /></Card>
       <Card title="By vehicle">
-        <Table head={["Vehicle", "Viewed", "Leads", "Paid", "MRR"]} rows={vehicleBreakdown(db, r).map((v) => [v.key, v.viewed, v.leads, v.paid, inr(v.revenue)])} />
+        <Table head={["Vehicle", "Viewed", "Bookings", "Paid", "Collected"]} rows={vehicleBreakdown(db, r).map((v) => [v.key, v.viewed, v.leads, v.paid, inr(v.revenue)])} />
       </Card>
       <Card title="By society (demand)">
-        <Table head={["Society", "Leads", "Active", "Not serv."]} rows={societyBreakdown(db, r).slice(0, 15).map((s) => [s.key, s.leads, s.active, s.notServiceable])} />
+        <Table head={["Society", "Bookings", "Active", "Not serv."]} rows={societyBreakdown(db, r).slice(0, 15).map((s) => [s.key, s.leads, s.active, s.notServiceable])} />
       </Card>
       <Card title="Time of day (IST)">
         <Columns
@@ -220,12 +239,13 @@ function SalesTab({ db, days }: { db: DB; days: number }) {
   const s = salesFunnel(db, makeRange(days));
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <Card title="Team speed (median)">
-        <div className="grid grid-cols-3 gap-2 text-center">
+      <Card title="Speed (median)">
+        <div className="grid grid-cols-2 gap-2 text-center">
           {[
-            ["First response", s.times.firstResponse],
+            ["Booking → paid", s.times.bookingToPaid],
+            ["Payment link → paid", s.times.payment],
+            ["Callback · first response", s.times.firstResponse],
             ["Confirm availability", s.times.confirmation],
-            ["Link → paid", s.times.payment],
           ].map(([l, v]) => (
             <div key={l as string} className="rounded-xl bg-cream-50 p-3">
               <p className="font-display tabular text-xl font-extrabold text-forest-900">{v ? hours(v as number) : "—"}</p>
@@ -233,7 +253,7 @@ function SalesTab({ db, days }: { db: DB; days: number }) {
             </div>
           ))}
         </div>
-        <p className="mt-3 text-xs text-ink-400">{Math.round(s.callbackRate * 100)}% of leads asked for a callback.</p>
+        <p className="mt-3 text-xs text-ink-400">{Math.round(s.callbackRate * 100)}% of bookings asked for a callback instead of paying.</p>
       </Card>
       <Card title={`Lead status · ${s.total} leads`}>
         <BarList rows={[...s.statusCounts.entries()].map(([k, v]) => [statusLabel[k], v])} />
