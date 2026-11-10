@@ -4,7 +4,7 @@
 export const site = {
   name: "CAREKAR",
   tagline: "Your Car • Our Care",
-  url: "https://carekar.in",
+  url: "https://www.carekar.co",
   area: "Greater Noida West",
   areaFull: "Greater Noida West, Uttar Pradesh",
   contact: {
