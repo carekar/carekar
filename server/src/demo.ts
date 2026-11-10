@@ -119,8 +119,8 @@ export function buildDemoData(): DB {
       ev("form_step_completed", { step: 4, duration_ms: 15000 + Math.floor(r() * 25000) }, "/book");
       if (!pass(0.95)) { ev("form_abandoned", { last_step: 5, last_field: "review" }, "/book"); continue; }
 
-      // Lead submitted (about 1 in 7 car bookings is a one-time clean)
-      const single = plan.vehicle !== "bike" && r() < 0.15;
+      // Lead submitted (about 1 in 7 bookings is a one-time clean)
+      const single = r() < 0.15;
       const price = single ? oneTime.price : plan.price;
       const id = "lead_demo_" + db.seq;
       const ref = "DEMO-" + db.seq++;

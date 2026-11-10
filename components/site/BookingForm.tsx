@@ -4,10 +4,10 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/Icon";
-import { formatINR, isCar, type Service, type VehicleType } from "@/lib/site";
-import { findPlan } from "@/lib/config";
+import { formatINR, type Service, type VehicleType } from "@/lib/site";
+import { findPlan, oneTimeOption, oneTimeVehicleError } from "@/lib/config";
 import { useConfig } from "./ConfigProvider";
-import { leadSchema, oneTimeVehicleError, stepFields, type LeadInput } from "@/lib/validation";
+import { leadSchema, stepFields, type LeadInput } from "@/lib/validation";
 import { flushTracking, getSessionId, getTouches, getVisitorId, track } from "@/lib/track";
 import { payForBooking } from "@/lib/checkout";
 import { useCustomer } from "./useCustomer";
@@ -156,7 +156,7 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
       }
     }
     if (fields.includes("vehicle") && !errs.vehicle) {
-      const e = oneTimeVehicleError(data);
+      const e = oneTimeVehicleError(config, data);
       if (e) errs.vehicle = e;
     }
     if (fields.includes("startDate") && data.startDate && data.startDate < tomorrow()) errs.startDate = "Start date must be from tomorrow";
@@ -240,14 +240,18 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
 
   const plan = planByVehicle(data.vehicle);
   const single = data.service === "one_time";
-  const price = single ? oneTime.price : plan?.price ?? 0;
+  // vehicle cards for the chosen service, each with its own price (monthly or one-time)
+  const vehicles = single ? oneTime.options : plans;
+  const option = single ? oneTimeOption(config, data.vehicle) : undefined;
+  const price = (single ? option?.price : plan?.price) ?? 0;
   const priceUnit = single ? " one-time" : "/month";
   const planName = single ? oneTime.label : plan ? plan.label + " plan" : "";
-  const vehicles = single ? plans.filter((p) => isCar(p.vehicle)) : plans;
   const chooseService = (svc: Service) => {
     if (svc === data.service) return;
     set("service", svc);
-    if (svc === "one_time" && data.vehicle === "bike") set("vehicle", "");
+    // keep the vehicle only if it's offered for the other service too
+    const offered = svc === "one_time" ? oneTime.options : plans;
+    if (data.vehicle && !offered.some((o) => o.vehicle === data.vehicle)) set("vehicle", "");
     track("service_selected", { service: svc, location: "form" });
   };
   const progress = step === 5 ? 100 : ((step - 1) / 4) * 100 + 8;
@@ -287,7 +291,7 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
               <div className="mb-6 grid grid-cols-2 gap-2 rounded-2xl bg-cream-100 p-1.5" role="radiogroup" aria-label="Type of service">
                 {([
                   ["subscription", "Monthly plan", "Scheduled cleaning"],
-                  ["one_time", "One-time clean", `${formatINR(oneTime.price)} · inside & out`],
+                  ["one_time", "One-time clean", `From ${formatINR(oneTime.price)} · one visit`],
                 ] as const).map(([svc, title, sub]) => (
                   <button
                     key={svc}
@@ -303,8 +307,8 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
                 ))}
               </div>
             )}
-            <h1 className="text-[28px] font-extrabold leading-tight text-forest-900">{single ? "Which car do you want cleaned?" : "Which vehicle do you want cleaned?"}</h1>
-            <p className="mt-1 text-ink-600">{single ? `Interior + exterior in one visit. ${formatINR(oneTime.price)} for any car.` : "Your monthly price is shown on each option."}</p>
+            <h1 className="text-[28px] font-extrabold leading-tight text-forest-900">Which vehicle do you want cleaned?</h1>
+            <p className="mt-1 text-ink-600">{single ? "One visit. The one-time price is shown on each option." : "Your monthly price is shown on each option."}</p>
             <div className="mt-5 grid grid-cols-2 gap-3" role="radiogroup" aria-label="Vehicle type">
               {vehicles.map((p) => {
                 const active = data.vehicle === p.vehicle;
@@ -317,7 +321,7 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
                     onClick={() => {
                       set("vehicle", p.vehicle);
                       track("vehicle_selected", { vehicle: p.vehicle, location: "form" });
-                      track("plan_viewed", { vehicle: p.vehicle, price: single ? oneTime.price : p.price, service: data.service, location: "form" });
+                      track("plan_viewed", { vehicle: p.vehicle, price: p.price, service: data.service, location: "form" });
                     }}
                     className={
                       "relative overflow-hidden rounded-2xl border-2 bg-white text-left transition " + (vehicles.length % 2 ? "last:col-span-2 " : "") +
@@ -330,7 +334,7 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
                     <div className="flex items-end justify-between gap-2 p-3">
                       <div>
                         <p className="font-bold leading-tight text-forest-900">{p.label}</p>
-                        <p className="tabular mt-0.5 text-sm font-semibold text-forest-700">{formatINR(single ? oneTime.price : p.price)}<span className="font-normal text-ink-600">{single ? " once" : "/mo"}</span></p>
+                        <p className="tabular mt-0.5 text-sm font-semibold text-forest-700">{formatINR(p.price)}<span className="font-normal text-ink-600">{single ? " once" : "/mo"}</span></p>
                       </div>
                       <span className={"grid size-6 shrink-0 place-items-center rounded-full border-2 " + (active ? "border-forest-700 bg-forest-700 text-white" : "border-cream-200")}>
                         {active && <Icon name="check" className="size-3.5" strokeWidth={3} />}
@@ -346,7 +350,7 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
               <div className="mt-5 rounded-2xl border border-leaf-200 bg-white p-4">
                 <p className="text-sm font-bold text-forest-900">Included in {single ? "one-time cleaning" : plan!.label + " plan"}</p>
                 <ul className="mt-2 space-y-1.5 text-sm text-ink-600">
-                  {(single ? oneTime.inclusions : plan!.inclusions).map((i) => (
+                  {(single ? option?.inclusions ?? oneTime.inclusions : plan!.inclusions).map((i) => (
                     <li key={i} className="flex gap-2">
                       <Icon name="check" className="mt-0.5 size-4 shrink-0 text-leaf-400" strokeWidth={2.5} /> {i}
                     </li>
@@ -484,7 +488,7 @@ export function BookingForm({ initialVehicle, initialService }: { initialVehicle
             <div className="mt-5 overflow-hidden rounded-2xl bg-forest-900 text-white">
               <div className="flex items-center gap-4 p-4">
                 <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-xl">
-                  <Image src={single ? oneTime.image : plan.image} alt="" fill sizes="96px" className="object-cover" />
+                  <Image src={single && plan.vehicle !== "bike" ? oneTime.image : plan.image} alt="" fill sizes="96px" className="object-cover" />
                 </div>
                 <div>
                   <p className="text-sm text-white/70">{planName}{data.vehicleCount > 1 ? ` × ${data.vehicleCount}` : ""}</p>

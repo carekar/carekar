@@ -196,7 +196,7 @@ export function AccountBookings() {
           <div className="mt-5 grid gap-2">
             <Link href="/book?service=subscription" className="btn-primary w-full">See monthly plans</Link>
             {!config.oneTime.hidden && (
-              <Link href="/book?service=one_time" className="btn-outline w-full">One-time cleaning · {formatINR(config.oneTime.price)}</Link>
+              <Link href="/book?service=one_time" className="btn-outline w-full">One-time cleaning · from {formatINR(config.oneTime.price)}</Link>
             )}
           </div>
         </div>

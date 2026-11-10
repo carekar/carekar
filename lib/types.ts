@@ -101,7 +101,8 @@ export type Settings = {
   contact?: { phone?: string; whatsapp?: string; email?: string };
   prices?: Partial<Record<VehicleType, number>>;
   hiddenPlans?: VehicleType[];
-  oneTime?: { price?: number; hidden?: boolean };
+  /** prices / hiddenVehicles per vehicle type; price is the older flat price, used where a vehicle has none */
+  oneTime?: { prices?: Partial<Record<VehicleType, number>>; hiddenVehicles?: VehicleType[]; hidden?: boolean; price?: number };
   societies?: string[];
 };
 

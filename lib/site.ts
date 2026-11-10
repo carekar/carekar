@@ -54,16 +54,15 @@ export const planByVehicle = (v: string | null | undefined) => plans.find((p) =>
 export type Service = "subscription" | "one_time";
 export const services = ["subscription", "one_time"] as const;
 
-/** One-time car cleaning: interior + exterior in a single visit, same price for every car. Price editable in admin. */
+/** One-time cleaning: a single visit (cars inside + out, bikes a full wash). Price per vehicle type, editable in admin. */
 export const oneTime = {
-  label: "One-time car cleaning",
+  label: "One-time cleaning",
+  /** starting price for every vehicle type until the admin sets its own */
   price: 249,
   image: "/images/one-time-clean.webp",
   inclusions: ["Full exterior cleaning", "Interior cleaning: dashboard, seats & mats", "Done in your society parking", "Trained & verified staff"],
+  bikeInclusions: ["Full wash: body, seat & wheels", "Done in your society parking", "Trained & verified staff"],
 };
-
-/** Vehicles the one-time clean is offered for (cars only). */
-export const isCar = (v: VehicleType | "" | undefined) => !!v && v !== "bike";
 
 export const formatINR = (n: number) => "₹" + n.toLocaleString("en-IN");
 
@@ -106,7 +105,7 @@ export const faqs = [
   },
   {
     q: "Can I book just one cleaning?",
-    a: "Yes. One-time car cleaning covers both interior and exterior in a single visit, at the same price for every car. It's a good way to try us before subscribing.",
+    a: "Yes. One-time cleaning is a single visit: interior and exterior for cars, a full wash for bikes and scooty. The price depends on your vehicle type. It's a good way to try us before subscribing.",
   },
   {
     q: "When do I pay?",

@@ -23,7 +23,7 @@ const amountDue = (l: Lead) => l.planPrice * (l.vehicleCount || 1);
 
 function paymentMessage(l: Lead) {
   const first = l.name.split(" ")[0];
-  const what = isOneTime(l) ? "one-time car cleaning" : `${planByVehicle(l.vehicle)?.label} plan`;
+  const what = isOneTime(l) ? "one-time cleaning" : `${planByVehicle(l.vehicle)?.label} plan`;
   return `Hi ${first}, here is your secure Razorpay payment link for your Carekar ${what} (${inr(amountDue(l))}${isOneTime(l) ? "" : " for the month"}): ${l.paymentLinkUrl ?? "[payment link]"}`;
 }
 
@@ -63,7 +63,7 @@ const quiet = new Set(["page_view", "scroll_depth", "section_view", "form_step_v
 function templates(l: Lead) {
   const first = l.name.split(" ")[0];
   const plan = planByVehicle(l.vehicle);
-  const what = isOneTime(l) ? `one-time car cleaning (${plan?.label}) is ${inr(l.planPrice)}` : `${plan?.label} plan is ${inr(l.planPrice)}/month`;
+  const what = isOneTime(l) ? `one-time cleaning (${plan?.label}) is ${inr(l.planPrice)}` : `${plan?.label} plan is ${inr(l.planPrice)}/month`;
   return [
     ["Booking received", `Hi ${first}, thank you for booking with Carekar (Ref ${l.ref}). We're checking availability in ${l.society} and will confirm shortly.`],
     ["Availability confirmed", `Good news ${first}! Carekar is available in ${l.society}. Your ${what}. We'll share a secure payment link to confirm your booking.`],

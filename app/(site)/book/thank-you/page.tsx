@@ -52,7 +52,7 @@ export default async function ThankYou({ searchParams }: { searchParams: Promise
           {[
             paid ? ["Payment done", "A receipt is on its way from Razorpay."] : ["Availability check", "We confirm we service your society."],
             paid ? ["Confirmation on WhatsApp", "We confirm your slot and parking details."] : ["Payment", "Pay securely via UPI, card or netbanking from My bookings."],
-            single ? ["Cleaning visit", "On your chosen date, interior + exterior."] : ["Cleaning starts", "From your preferred start date."],
+            single ? ["Cleaning visit", "One visit on your chosen date."] : ["Cleaning starts", "From your preferred start date."],
           ].map(([t, d], i) => (
             <li key={t} className="flex gap-3">
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-forest-700 text-sm font-bold text-white">{i + 1}</span>

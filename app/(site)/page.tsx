@@ -45,7 +45,7 @@ export default async function Home() {
             priceCurrency: "INR",
             priceSpecification: { "@type": "UnitPriceSpecification", price: p.price, priceCurrency: "INR", unitText: "MONTH" },
           })),
-          ...(oneTime.hidden ? [] : [{ "@type": "Offer", name: `${oneTime.label} (interior + exterior)`, price: oneTime.price, priceCurrency: "INR" }]),
+          ...(oneTime.hidden ? [] : oneTime.options.map((o) => ({ "@type": "Offer", name: `${oneTime.label} (${o.label})`, price: o.price, priceCurrency: "INR" }))),
         ],
       },
       {
@@ -165,10 +165,14 @@ export default async function Home() {
               <div className="flex flex-col p-5 md:p-7">
                 <p className="eyebrow">Just once?</p>
                 <h3 className="mt-1 text-2xl font-extrabold leading-tight text-forest-900 md:text-3xl">{oneTime.label}</h3>
-                <p className="mt-1 text-ink-600">Interior and exterior in a single visit, for any car. Try us before you subscribe.</p>
+                <p className="mt-1 text-ink-600">A single visit: interior and exterior for cars, a full wash for bikes and scooty. Try us before you subscribe.</p>
                 <p className="font-display tabular mt-4 text-[40px] font-extrabold leading-none text-forest-900">
+                  {new Set(oneTime.options.map((o) => o.price)).size > 1 && <span className="mr-1 font-sans text-base font-medium text-ink-600">from</span>}
                   {"₹" + oneTime.price.toLocaleString("en-IN")}
                   <span className="ml-1 font-sans text-base font-medium text-ink-600">one-time</span>
+                </p>
+                <p className="tabular mt-2 text-sm text-ink-600">
+                  {oneTime.options.map((o) => `${o.label} ₹${o.price.toLocaleString("en-IN")}`).join(" · ")}
                 </p>
                 <ul className="mt-4 grid gap-2 text-sm text-ink-600 sm:grid-cols-2">
                   {oneTime.inclusions.map((i) => (

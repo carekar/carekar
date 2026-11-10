@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { leadSchema, oneTimeVehicleError } from "../../../lib/validation";
-import { priceFor, serviceLabel } from "../../../lib/config";
+import { leadSchema } from "../../../lib/validation";
+import { oneTimeVehicleError, priceFor, serviceLabel } from "../../../lib/config";
 import type { LeadMeta, Session, TrackEvent } from "../../../lib/types";
 import { repo } from "../repo";
 import { getConfig } from "../settings";
@@ -112,7 +112,7 @@ publicRoutes.post("/leads", async (req, res) => {
   }
   const { consent: _consent, ...fields } = parsed.data;
   const config = await getConfig();
-  const vehicleError = oneTimeVehicleError(fields) || (fields.service === "one_time" && config.oneTime.hidden ? "One-time cleaning isn't available right now" : undefined);
+  const vehicleError = oneTimeVehicleError(config, fields);
   if (vehicleError) return void res.status(422).json({ error: vehicleError, fields: { vehicle: [vehicleError] } });
 
   // Confirming a booking needs a Google login (Firebase). A callback request doesn't.

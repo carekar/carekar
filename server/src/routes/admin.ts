@@ -70,28 +70,32 @@ adminRoutes.put("/settings", editor, async (req, res) => {
     email?: string;
     prices?: Record<string, unknown>;
     hiddenPlans?: unknown[];
-    oneTimePrice?: unknown;
+    oneTimePrices?: Record<string, unknown>;
+    oneTimeHiddenVehicles?: unknown[];
     oneTimeHidden?: unknown;
     societies?: unknown[];
   };
-  const oneTimePrice = Number(b.oneTimePrice);
   const settings: Settings = {
     contact: { phone: digits10(b.phone), whatsapp: digits10(b.whatsapp), email: String(b.email || "").trim().slice(0, 80) },
     prices: {},
     hiddenPlans: [],
-    oneTime: {
-      price: Number.isInteger(oneTimePrice) && oneTimePrice >= 1 && oneTimePrice <= 100000 ? oneTimePrice : undefined,
-      hidden: !!b.oneTimeHidden,
-    },
+    oneTime: { prices: {}, hiddenVehicles: [], hidden: !!b.oneTimeHidden },
     societies: (Array.isArray(b.societies) ? b.societies : [])
       .map((s) => String(s).trim().slice(0, 80))
       .filter((s, i, a) => s && a.indexOf(s) === i)
       .slice(0, 300),
   };
+  const validPrice = (v: unknown) => {
+    const n = Number(v);
+    return Number.isInteger(n) && n >= 1 && n <= 100000 ? n : undefined;
+  };
   for (const p of plans) {
-    const price = Number(b.prices?.[p.vehicle]);
-    if (Number.isInteger(price) && price >= 1 && price <= 100000) settings.prices![p.vehicle] = price;
+    const price = validPrice(b.prices?.[p.vehicle]);
+    if (price) settings.prices![p.vehicle] = price;
     if (b.hiddenPlans?.includes(p.vehicle)) settings.hiddenPlans!.push(p.vehicle);
+    const oneTimePrice = validPrice(b.oneTimePrices?.[p.vehicle]);
+    if (oneTimePrice) settings.oneTime!.prices![p.vehicle] = oneTimePrice;
+    if (b.oneTimeHiddenVehicles?.includes(p.vehicle)) settings.oneTime!.hiddenVehicles!.push(p.vehicle);
   }
   await repo().saveSettings(settings);
   res.status(204).end();
